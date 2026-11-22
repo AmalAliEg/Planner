@@ -1,0 +1,3 @@
+@echo off
+echo Starting Adaptive Scheduler Agent...
+start "" "%~dp0index.html"
