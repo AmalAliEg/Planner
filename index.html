@@ -440,11 +440,31 @@
         <!-- Labs & Deadlines Monitor (with 2-day reminder & Calendar .ics) -->
         <div class="lg:col-span-6 elite-card rounded-2xl p-5 space-y-4">
           <div class="flex justify-between items-center pb-3 border-b border-white/5">
-            <h3 class="text-sm font-bold text-white flex items-center gap-2">
-              <span>⏰</span> تسليمات اللابات والمهام (Labs Deadlines)
-            </h3>
-            <span class="badge bg-rose-900/40 text-rose-300 border border-rose-500/20">تنبيه قبل يومين</span>
+            <div>
+              <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                <span>⏰</span> تسليمات اللابات والمهام (Labs Deadlines)
+              </h3>
+              <p class="text-[10px] text-slate-400 mt-0.5">تقويم شهري تفاعلي مع تنبيه عاجل قبل الموعد بيومين</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="badge bg-rose-900/40 text-rose-300 border border-rose-500/20">تنبيه قبل يومين</span>
+              <button onclick="TaskAgent.openAddModal('chapter', 'type_lab', true)" class="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-2.5 py-1 rounded-lg transition shadow-md shadow-rose-600/20 flex items-center gap-1">
+                ➕ إضافة لاب / تسليم
+              </button>
+            </div>
           </div>
+
+          <!-- Interactive Visual Labs Calendar in Dashboard -->
+          <div id="dashboard-labs-calendar" class="p-3 bg-slate-950/80 rounded-xl border border-white/5 space-y-2">
+            <!-- Populated dynamically by DashboardAgent.renderLabsCalendar() -->
+          </div>
+
+          <!-- Active Filter Pill Bar -->
+          <div id="labs-filter-bar" class="hidden flex items-center justify-between text-xs px-1 bg-indigo-950/40 border border-indigo-500/20 rounded-lg p-1.5">
+            <span id="labs-filter-text" class="text-indigo-300 font-semibold text-[11px]"></span>
+            <button onclick="DashboardAgent.clearLabFilter()" class="text-rose-400 hover:text-rose-300 hover:underline text-[11px] font-bold">عرض كل اللابات ↺</button>
+          </div>
+
           <div id="labs-tracker-container" class="space-y-3 max-h-96 overflow-y-auto pr-1">
             <!-- Populated dynamically by DashboardAgent.renderLabs() -->
           </div>
@@ -957,17 +977,68 @@
             </div>
           </div>
 
-          <!-- Lab deadline fields -->
-          <div class="pt-2 border-t border-white/5 space-y-2">
+          <!-- Lab deadline fields with Interactive Inline Calendar -->
+          <div class="pt-2 border-t border-white/5 space-y-2.5">
             <label class="flex items-center gap-2 cursor-pointer text-slate-200 font-bold">
-              <input id="modal-is-lab" type="checkbox" onchange="document.getElementById('modal-deadline-wrap').classList.toggle('hidden', !this.checked)" class="rounded text-rose-500">
+              <input id="modal-is-lab" type="checkbox" onchange="TaskAgent.onLabToggle(this.checked)" class="rounded text-rose-500 focus:ring-rose-500">
               <span>هل هذا الشابتر هو Lab / Task له موعد تسليم رسمي؟</span>
             </label>
-            <div id="modal-deadline-wrap" class="hidden">
-              <label class="block text-rose-400 mb-1 font-semibold">تاريخ ووقت التسليم (Due Date & Time):</label>
-              <input id="modal-due-date" type="datetime-local"
-                     class="w-full bg-slate-900 border border-rose-500/30 rounded-lg p-2 text-white font-mono">
-              <p class="text-[10px] text-slate-500 mt-1">سيقوم التطبيق بتنبيهك تلقائياً قبل الموعد بيومين مع خيار الإضافة للتقويم والإيميل.</p>
+
+            <div id="modal-deadline-wrap" class="hidden space-y-2.5 p-3 rounded-xl bg-slate-950/90 border border-rose-500/30">
+              <div class="flex items-center justify-between">
+                <label class="block text-rose-400 font-semibold text-xs flex items-center gap-1.5">
+                  <span>📅</span> تقويم تحديد موعد التسليم (Deadline Calendar):
+                </label>
+                <span class="text-[10px] text-slate-400 font-mono">تنبيه قبل يومين</span>
+              </div>
+
+              <!-- Quick Presets -->
+              <div class="space-y-1">
+                <span class="text-[10px] text-slate-400 block font-semibold">اختيار سريع لموعد التسليم:</span>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[11px]">
+                  <button type="button" onclick="CalendarPicker.setPreset(2)" class="px-2 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 font-bold transition flex items-center justify-center gap-1 shadow-sm">
+                    ⚡ بعد يومين (48س)
+                  </button>
+                  <button type="button" onclick="CalendarPicker.setPreset(3)" class="px-2 py-1.5 rounded-lg bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-300 font-medium transition flex items-center justify-center gap-1">
+                    ⚡ بعد 3 أيام
+                  </button>
+                  <button type="button" onclick="CalendarPicker.setPresetWeekend()" class="px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-300 transition flex items-center justify-center gap-1">
+                    ⚡ نهاية الأسبوع (الخميس)
+                  </button>
+                  <button type="button" onclick="CalendarPicker.setPreset(7)" class="px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-300 transition flex items-center justify-center gap-1">
+                    ⚡ بعد أسبوع
+                  </button>
+                </div>
+              </div>
+
+              <!-- Interactive Inline Calendar Widget -->
+              <div id="modal-inline-calendar">
+                <!-- Populated dynamically by CalendarPicker.render() -->
+              </div>
+
+              <!-- Time Selector & Quick Hours -->
+              <div class="pt-2 border-t border-white/5 space-y-1.5">
+                <div class="flex items-center justify-between text-[11px]">
+                  <span class="text-slate-400 font-semibold">توقيت التسليم:</span>
+                  <div class="flex items-center gap-1">
+                    <button type="button" onclick="CalendarPicker.setTime('12:00')" class="px-1.5 py-0.5 rounded bg-slate-900 border border-white/10 text-[10px] text-slate-300 hover:text-white">12:00 م</button>
+                    <button type="button" onclick="CalendarPicker.setTime('18:00')" class="px-1.5 py-0.5 rounded bg-rose-950/60 border border-rose-500/30 text-[10px] text-rose-300 hover:text-white">06:00 م</button>
+                    <button type="button" onclick="CalendarPicker.setTime('21:00')" class="px-1.5 py-0.5 rounded bg-slate-900 border border-white/10 text-[10px] text-slate-300 hover:text-white">09:00 م</button>
+                    <button type="button" onclick="CalendarPicker.setTime('23:59')" class="px-1.5 py-0.5 rounded bg-slate-900 border border-white/10 text-[10px] text-slate-300 hover:text-white">11:59 م</button>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <input id="modal-time-picker" type="time" value="18:00" onchange="CalendarPicker.setTime(this.value)"
+                         class="bg-slate-900 border border-white/10 rounded-lg p-1.5 text-white font-mono text-xs w-28">
+                  <input id="modal-due-date" type="hidden" value="">
+                </div>
+              </div>
+
+              <!-- Live Deadline Preview -->
+              <div id="modal-deadline-preview" class="p-2.5 rounded-xl bg-slate-900/90 border border-indigo-500/20 text-xs text-slate-300">
+                <!-- Live preview string rendered by CalendarPicker -->
+              </div>
+              <p class="text-[10px] text-slate-500">سيقوم التطبيق بتنبيهك تلقائياً قبل الموعد بيومين مع خيار الإضافة للتقويم والإيميل.</p>
             </div>
           </div>
         </div>
@@ -975,7 +1046,7 @@
         <!-- Task Type Selector (Populated from taskTypes) -->
         <div>
           <label class="block text-slate-300 mb-1 font-semibold">نوع المهمة (Task Type من جدول taskTypes):</label>
-          <select id="modal-task-type" class="w-full bg-slate-950 border border-white/10 rounded-lg p-2 text-white focus:outline-none focus:border-indigo-500">
+          <select id="modal-task-type" onchange="TaskAgent.onTypeSelectChange()" class="w-full bg-slate-950 border border-white/10 rounded-lg p-2 text-white focus:outline-none focus:border-indigo-500">
           </select>
         </div>
 
@@ -1924,11 +1995,26 @@
         }
       },
 
-      openAddModal() {
+      openAddModal(defaultLevel = 'course', defaultType = null, defaultIsLab = false) {
+        document.getElementById('modal-level').value = defaultLevel;
         this._populateTrackSelects();
         this._populateTypeSelect();
-        document.getElementById('task-modal').classList.remove('hidden');
+
+        if (defaultType) {
+          document.getElementById('modal-task-type').value = defaultType;
+        }
+
         this.onModalLevelChange();
+
+        if (defaultIsLab || defaultType === 'type_lab') {
+          const isLabCheckbox = document.getElementById('modal-is-lab');
+          if (isLabCheckbox) {
+            isLabCheckbox.checked = true;
+            this.onLabToggle(true);
+          }
+        }
+
+        document.getElementById('task-modal').classList.remove('hidden');
       },
 
       closeModal() {
@@ -1961,6 +2047,27 @@
         }
         if (!courseSel.innerHTML) {
           courseSel.innerHTML = '<option value="">-- لا توجد كورسات في هذا المسار بعد --</option>';
+        }
+      },
+
+      onTypeSelectChange() {
+        const typeId = document.getElementById('modal-task-type').value;
+        if (typeId === 'type_lab') {
+          document.getElementById('modal-level').value = 'chapter';
+          this.onModalLevelChange();
+          const isLabEl = document.getElementById('modal-is-lab');
+          if (isLabEl) {
+            isLabEl.checked = true;
+            this.onLabToggle(true);
+          }
+        }
+      },
+
+      onLabToggle(isChecked) {
+        const wrap = document.getElementById('modal-deadline-wrap');
+        if (wrap) wrap.classList.toggle('hidden', !isChecked);
+        if (isChecked) {
+          CalendarPicker.init(document.getElementById('modal-due-date')?.value);
         }
       },
 
@@ -2007,9 +2114,16 @@
             const totalLectures = parseInt(document.getElementById('modal-total-lectures').value) || 4;
             const totalDays     = parseInt(document.getElementById('modal-total-days').value) || 10;
 
+            const isLab = (typeId === 'type_lab');
+            let dueDate = null;
+            if (isLab || mode === 'days') {
+              const target = new Date(Date.now() + totalDays * 86400000);
+              dueDate = target.toISOString().slice(0, 16);
+            }
+
             const data = {
               id: key, name, typeId, planningMode: mode, totalLectures, totalDays,
-              description: desc, resourceLink: link, chapters: {}
+              isLab, dueDate, description: desc, resourceLink: link, chapters: {}
             };
             await firebaseWrite(CONSTANTS.PATHS.course(tid, key), data);
             if (!AppState.tracks[tid].courses) AppState.tracks[tid].courses = {};
@@ -2023,8 +2137,22 @@
 
             const h = parseInt(document.getElementById('modal-dur-hours').value) || 0;
             const m = parseInt(document.getElementById('modal-dur-minutes').value) || 0;
-            const isLab = document.getElementById('modal-is-lab').checked;
-            const dueDate = isLab ? document.getElementById('modal-due-date').value : null;
+            const isLabChecked = document.getElementById('modal-is-lab').checked;
+            const isLab = isLabChecked || (typeId === 'type_lab');
+
+            let dueDate = null;
+            if (isLab) {
+              const val = document.getElementById('modal-due-date').value;
+              if (val) {
+                dueDate = val;
+              } else {
+                // fallback to 2 days from now at 18:00
+                const fallback = new Date(Date.now() + 2 * 86400000);
+                fallback.setHours(18, 0, 0, 0);
+                const pad = n => String(n).padStart(2, '0');
+                dueDate = fallback.getFullYear() + '-' + pad(fallback.getMonth()+1) + '-' + pad(fallback.getDate()) + 'T18:00';
+              }
+            }
 
             const data = {
               id: key, name, typeId, durationHours: h, durationMinutes: m,
@@ -2049,16 +2177,212 @@
     };
 
     // =========================================================================
+    // SECTION 7.5: CALENDAR PICKER (Interactive Modal Inline Calendar)
+    // =========================================================================
+
+    const CalendarPicker = {
+      currentYear: 2026,
+      currentMonth: 10, // 0-indexed: 10 = November
+      selectedDateStr: '', // YYYY-MM-DD
+      selectedTimeStr: '18:00', // HH:mm
+
+      init(initialDateStr) {
+        const pad = n => String(n).padStart(2, '0');
+        if (initialDateStr && initialDateStr.includes('T')) {
+          const [dPart, tPart] = initialDateStr.split('T');
+          this.selectedDateStr = dPart;
+          this.selectedTimeStr = tPart ? tPart.slice(0, 5) : '18:00';
+          const d = new Date(dPart);
+          if (!isNaN(d.getTime())) {
+            this.currentYear = d.getFullYear();
+            this.currentMonth = d.getMonth();
+          }
+        } else {
+          // Default preset: exactly 2 days from now at 18:00!
+          const target = new Date(Date.now() + 2 * 86400000);
+          this.currentYear = target.getFullYear();
+          this.currentMonth = target.getMonth();
+          this.selectedDateStr = target.getFullYear() + '-' + pad(target.getMonth()+1) + '-' + pad(target.getDate());
+          this.selectedTimeStr = '18:00';
+        }
+
+        const timePicker = document.getElementById('modal-time-picker');
+        if (timePicker) timePicker.value = this.selectedTimeStr;
+
+        this.syncHiddenInput();
+        this.render();
+      },
+
+      setPreset(daysFromNow) {
+        const pad = n => String(n).padStart(2, '0');
+        const target = new Date(Date.now() + daysFromNow * 86400000);
+        this.currentYear = target.getFullYear();
+        this.currentMonth = target.getMonth();
+        this.selectedDateStr = target.getFullYear() + '-' + pad(target.getMonth()+1) + '-' + pad(target.getDate());
+        this.syncHiddenInput();
+        this.render();
+      },
+
+      setPresetWeekend() {
+        const now = new Date();
+        const day = now.getDay(); // 4 is Thursday
+        let daysUntilThursday = (4 - day + 7) % 7;
+        if (daysUntilThursday === 0) daysUntilThursday = 7;
+        this.setPreset(daysUntilThursday);
+      },
+
+      selectDate(year, month, day) {
+        const pad = n => String(n).padStart(2, '0');
+        this.selectedDateStr = year + '-' + pad(month + 1) + '-' + pad(day);
+        this.syncHiddenInput();
+        this.render();
+      },
+
+      setTime(timeStr) {
+        this.selectedTimeStr = timeStr || '18:00';
+        const timePicker = document.getElementById('modal-time-picker');
+        if (timePicker) timePicker.value = this.selectedTimeStr;
+        this.syncHiddenInput();
+      },
+
+      prevMonth() {
+        this.currentMonth--;
+        if (this.currentMonth < 0) {
+          this.currentMonth = 11;
+          this.currentYear--;
+        }
+        this.render();
+      },
+
+      nextMonth() {
+        this.currentMonth++;
+        if (this.currentMonth > 11) {
+          this.currentMonth = 0;
+          this.currentYear++;
+        }
+        this.render();
+      },
+
+      syncHiddenInput() {
+        const fullIso = this.selectedDateStr + 'T' + (this.selectedTimeStr || '18:00');
+        const input = document.getElementById('modal-due-date');
+        if (input) input.value = fullIso;
+
+        const preview = document.getElementById('modal-deadline-preview');
+        if (!preview) return;
+
+        const target = new Date(fullIso).getTime();
+        const now = Date.now();
+        const diffMs = target - now;
+        const diffHours = Math.round(diffMs / 3600000);
+        const diffDays = Math.ceil(diffMs / 86400000);
+
+        let urgencyTag = '';
+        if (diffMs < 0) {
+          urgencyTag = '<span class="badge bg-rose-950/80 text-rose-300 border border-rose-500/40">⚠️ الموعد في الماضي</span>';
+        } else if (diffMs <= (2.5 * 86400000)) {
+          urgencyTag = '<span class="badge bg-rose-900/80 text-rose-200 border border-rose-500/50 animate-pulse font-bold">🔴 عاجل: تسليم بعد ' + (diffHours <= 24 ? diffHours + ' ساعة' : diffDays + ' يوم') + '!</span>';
+        } else {
+          urgencyTag = '<span class="badge bg-slate-800 text-slate-300 border border-white/10 font-mono">متبقي ' + diffDays + ' يوم</span>';
+        }
+
+        const arabicDays = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+        const dayOfWeek = arabicDays[new Date(this.selectedDateStr + 'T00:00:00').getDay()] || '';
+
+        preview.innerHTML = `
+          <div class="flex flex-wrap items-center justify-between gap-1">
+            <div>
+              <span class="text-slate-400">🎯 الموعد المختار:</span>
+              <strong class="text-white font-mono mr-1">` + dayOfWeek + ' ' + this.selectedDateStr + ' (' + this.selectedTimeStr + ')' + `</strong>
+            </div>
+            ` + urgencyTag + `
+          </div>
+        `;
+      },
+
+      render() {
+        const container = document.getElementById('modal-inline-calendar');
+        if (!container) return;
+
+        const monthNames = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+        const daysHeader = ['سبت', 'أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة'];
+
+        const firstDay = new Date(this.currentYear, this.currentMonth, 1);
+        const lastDay = new Date(this.currentYear, this.currentMonth + 1, 0);
+        const daysInMonth = lastDay.getDate();
+        const startDayIndex = (firstDay.getDay() + 1) % 7;
+
+        const pad = n => String(n).padStart(2, '0');
+        const today = new Date();
+        const todayStr = today.getFullYear() + '-' + pad(today.getMonth()+1) + '-' + pad(today.getDate());
+
+        let html = `
+          <div class="bg-slate-900/90 border border-white/10 rounded-xl p-2.5 space-y-2">
+            <div class="flex items-center justify-between border-b border-white/5 pb-1.5 text-xs">
+              <button type="button" onclick="CalendarPicker.prevMonth()" class="text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-950 border border-white/5 text-[11px] transition">◀</button>
+              <span class="font-bold text-white text-xs">` + monthNames[this.currentMonth] + ' ' + this.currentYear + `</span>
+              <button type="button" onclick="CalendarPicker.nextMonth()" class="text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-950 border border-white/5 text-[11px] transition">▶</button>
+            </div>
+
+            <div class="grid grid-cols-7 gap-1 text-center text-[10px] text-slate-400 font-semibold">
+              ` + daysHeader.map(d => '<div>' + d + '</div>').join('') + `
+            </div>
+
+            <div class="grid grid-cols-7 gap-1 text-center text-xs">
+        `;
+
+        for (let i = 0; i < startDayIndex; i++) {
+          html += '<div class="p-1 text-slate-800 select-none">·</div>';
+        }
+
+        for (let day = 1; day <= daysInMonth; day++) {
+          const dateStr = this.currentYear + '-' + pad(this.currentMonth + 1) + '-' + pad(day);
+          const isSelected = (dateStr === this.selectedDateStr);
+          const isToday = (dateStr === todayStr);
+
+          let cls = 'p-1 rounded-lg font-mono text-[11px] cursor-pointer transition select-none flex items-center justify-center ';
+          if (isSelected) {
+            cls += 'bg-rose-600 text-white font-bold ring-2 ring-rose-400 shadow-md shadow-rose-600/30';
+          } else if (isToday) {
+            cls += 'bg-slate-800 text-amber-300 font-bold border border-amber-500/40 hover:bg-slate-700';
+          } else {
+            cls += 'text-slate-300 hover:bg-white/10';
+          }
+
+          html += '<div onclick="CalendarPicker.selectDate(' + this.currentYear + ',' + this.currentMonth + ',' + day + ')" class="' + cls + '">' + day + '</div>';
+        }
+
+        html += '</div></div>';
+        container.innerHTML = html;
+        this.syncHiddenInput();
+      }
+    };
+
+    // =========================================================================
     // SECTION 8: DASHBOARD AGENT (Types CRUD, Labs Tracker & Calendar)
     // =========================================================================
 
     const DashboardAgent = {
-      isWithinDays(isoDateStr, days) {
-        if (!isoDateStr) return false;
+      selectedLabDateFilter: null,
+      calYear: 2026,
+      calMonth: 10, // November
+
+      getDueStatus(isoDateStr) {
+        if (!isoDateStr) return { label: 'بدون موعد', isUrgent: false, isOverdue: false, daysLeft: null, hoursLeft: null };
         const target = new Date(isoDateStr).getTime();
         const now = Date.now();
         const diffMs = target - now;
-        return diffMs > 0 && diffMs <= (days * 86400000);
+        const diffHours = Math.round(diffMs / 3600000);
+        const daysLeft = Math.ceil(diffMs / 86400000);
+
+        if (diffMs < 0) {
+          return { label: '⚠️ متأخر (' + Math.abs(daysLeft) + ' يوم)', isUrgent: true, isOverdue: true, daysLeft, hoursLeft: diffHours };
+        }
+        if (diffMs <= (2.5 * 86400000)) {
+          const text = diffHours <= 24 ? ('متبقي ' + diffHours + ' ساعة!') : ('متبقي يومين (' + diffHours + ' س)!');
+          return { label: '🔴 عاجل: ' + text, isUrgent: true, isOverdue: false, daysLeft, hoursLeft: diffHours };
+        }
+        return { label: '🟢 مجدول (' + daysLeft + ' يوم)', isUrgent: false, isOverdue: false, daysLeft, hoursLeft: diffHours };
       },
 
       renderTypes() {
@@ -2086,51 +2410,199 @@
         });
       },
 
-      renderLabs() {
-        const container = document.getElementById('labs-tracker-container');
-        if (!container) return;
-        container.innerHTML = '';
-
+      getAllLabs() {
         const labs = [];
         Object.entries(AppState.tracks || {}).forEach(([tid, t]) => {
           Object.entries(t.courses || {}).forEach(([cid, c]) => {
+            // Check if course itself is a lab or planned in days
+            if (c.typeId === 'type_lab' || c.isLab || (c.planningMode === 'days' && c.dueDate)) {
+              labs.push({
+                id: c.id, name: c.name, trackName: t.name, courseName: c.name,
+                tid, cid, chId: null, isLab: true, isCourse: true,
+                dueDate: c.dueDate, isDone: false, resourceLink: c.resourceLink
+              });
+            }
+            // Check chapters
             Object.entries(c.chapters || {}).forEach(([chId, ch]) => {
-              if (ch.isLab || ch.dueDate) {
+              if (ch.isLab || ch.dueDate || ch.typeId === 'type_lab') {
                 labs.push({ ...ch, trackName: t.name, courseName: c.name, tid, cid, chId });
               }
             });
           });
         });
+        return labs;
+      },
+
+      filterByDate(dateStr) {
+        this.selectedLabDateFilter = dateStr;
+        this.renderLabs();
+      },
+
+      clearLabFilter() {
+        this.selectedLabDateFilter = null;
+        this.renderLabs();
+      },
+
+      prevCalMonth() {
+        this.calMonth--;
+        if (this.calMonth < 0) {
+          this.calMonth = 11;
+          this.calYear--;
+        }
+        this.renderLabsCalendar();
+      },
+
+      nextCalMonth() {
+        this.calMonth++;
+        if (this.calMonth > 11) {
+          this.calMonth = 0;
+          this.calYear++;
+        }
+        this.renderLabsCalendar();
+      },
+
+      renderLabsCalendar() {
+        const container = document.getElementById('dashboard-labs-calendar');
+        if (!container) return;
+
+        const labs = this.getAllLabs();
+        const pad = n => String(n).padStart(2, '0');
+
+        // Map labs by date YYYY-MM-DD
+        const labsByDate = {};
+        labs.forEach(l => {
+          if (!l.dueDate) return;
+          const dStr = l.dueDate.slice(0, 10);
+          if (!labsByDate[dStr]) labsByDate[dStr] = [];
+          labsByDate[dStr].push(l);
+        });
+
+        const monthNames = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+        const daysHeader = ['سبت', 'أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة'];
+
+        const firstDay = new Date(this.calYear, this.calMonth, 1);
+        const lastDay = new Date(this.calYear, this.calMonth + 1, 0);
+        const daysInMonth = lastDay.getDate();
+        const startDayIndex = (firstDay.getDay() + 1) % 7;
+
+        const today = new Date();
+        const todayStr = today.getFullYear() + '-' + pad(today.getMonth()+1) + '-' + pad(today.getDate());
+
+        let html = `
+          <div class="flex items-center justify-between border-b border-white/5 pb-2 text-xs">
+            <button onclick="DashboardAgent.prevCalMonth()" class="text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-900 border border-white/5 text-[10px]">◀</button>
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-white text-xs">📅 تقويم اللابات: ` + monthNames[this.calMonth] + ' ' + this.calYear + `</span>
+              <span class="text-[10px] text-slate-400 font-mono">(` + labs.length + ` تسليم مسجل)</span>
+            </div>
+            <button onclick="DashboardAgent.nextCalMonth()" class="text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-900 border border-white/5 text-[10px]">▶</button>
+          </div>
+
+          <div class="grid grid-cols-7 gap-1 text-center text-[10px] text-slate-400 font-semibold pt-1">
+            ` + daysHeader.map(d => '<div>' + d + '</div>').join('') + `
+          </div>
+
+          <div class="grid grid-cols-7 gap-1 text-center text-xs">
+        `;
+
+        for (let i = 0; i < startDayIndex; i++) {
+          html += '<div class="p-1 text-slate-800 select-none">·</div>';
+        }
+
+        for (let day = 1; day <= daysInMonth; day++) {
+          const dateStr = this.calYear + '-' + pad(this.calMonth + 1) + '-' + pad(day);
+          const hasLabs = labsByDate[dateStr] && labsByDate[dateStr].length > 0;
+          const isFilterActive = (this.selectedLabDateFilter === dateStr);
+          const isToday = (dateStr === todayStr);
+
+          let cls = 'p-1 rounded-lg font-mono text-[11px] cursor-pointer transition select-none flex flex-col items-center justify-center relative min-h-[32px] ';
+          if (isFilterActive) {
+            cls += 'bg-indigo-600 text-white font-bold ring-2 ring-indigo-400 shadow-md shadow-indigo-600/30';
+          } else if (hasLabs) {
+            cls += 'bg-rose-950/80 text-rose-200 font-bold border border-rose-500/50 hover:bg-rose-900/90 shadow-sm';
+          } else if (isToday) {
+            cls += 'bg-slate-800 text-amber-300 font-bold border border-amber-500/30 hover:bg-slate-700';
+          } else {
+            cls += 'text-slate-400 hover:bg-white/5';
+          }
+
+          const badge = hasLabs
+            ? '<span class="w-1.5 h-1.5 rounded-full bg-rose-400 mt-0.5 animate-ping"></span>'
+            : '';
+
+          html += `<div onclick="DashboardAgent.filterByDate('` + dateStr + `')" class="` + cls + `" title="` + (hasLabs ? (labsByDate[dateStr].length + ' تسليم في هذا اليوم') : '') + `">
+            <span>` + day + `</span>
+            ` + badge + `
+          </div>`;
+        }
+
+        html += '</div>';
+        container.innerHTML = html;
+      },
+
+      renderLabs() {
+        this.renderLabsCalendar();
+
+        const container = document.getElementById('labs-tracker-container');
+        if (!container) return;
+        container.innerHTML = '';
+
+        let labs = this.getAllLabs();
+
+        const filterBar = document.getElementById('labs-filter-bar');
+        const filterText = document.getElementById('labs-filter-text');
+
+        if (this.selectedLabDateFilter) {
+          if (filterBar) filterBar.classList.remove('hidden');
+          if (filterText) filterText.textContent = '🔍 تصفية حسب تاريخ: ' + this.selectedLabDateFilter;
+          labs = labs.filter(l => l.dueDate && l.dueDate.startsWith(this.selectedLabDateFilter));
+        } else {
+          if (filterBar) filterBar.classList.add('hidden');
+        }
 
         if (!labs.length) {
-          container.innerHTML = '<div class="text-center text-slate-500 py-6 text-xs">لا توجد لابات أو تسليمات مسجلة حالياً.</div>';
+          container.innerHTML = `<div class="text-center text-slate-500 py-6 text-xs space-y-1">
+            <div>لا توجد لابات أو تسليمات تطابق هذا التاريخ.</div>
+            <button onclick="TaskAgent.openAddModal('chapter', 'type_lab', true)" class="text-rose-400 hover:underline text-[11px] font-bold">➕ إضافة لاب جديد الآن</button>
+          </div>`;
           return;
         }
 
         labs.sort((a, b) => (new Date(a.dueDate || 0)) - (new Date(b.dueDate || 0)));
 
         labs.forEach(l => {
-          const isUrgent = l.dueDate && this.isWithinDays(l.dueDate, 2);
-          const daysLeft = l.dueDate ? Math.ceil((new Date(l.dueDate) - new Date()) / 86400000) : null;
+          const st = this.getDueStatus(l.dueDate);
 
           const card = document.createElement('div');
           card.className = 'p-3 rounded-xl border transition space-y-2 ' +
-            (isUrgent ? 'border-rose-500/40 bg-rose-950/20 deadline-urgent' : 'border-white/5 bg-slate-950/60');
+            (st.isUrgent ? 'border-rose-500/50 bg-rose-950/20 deadline-urgent' : 'border-white/5 bg-slate-950/60');
+
+          const doneBadge = l.isDone
+            ? '<span class="text-emerald-400 text-[10px] font-bold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30">✅ مسلّم</span>'
+            : '';
+
+          const linkBadge = l.resourceLink
+            ? '<a href="' + l.resourceLink + '" target="_blank" class="text-[10px] text-indigo-300 hover:text-white bg-indigo-950/80 px-2 py-0.5 rounded border border-indigo-500/30 transition">🔗 المرجع</a>'
+            : '';
 
           card.innerHTML = `
             <div class="flex justify-between items-start gap-2 text-xs">
               <div>
                 <div class="font-bold text-white flex items-center gap-1.5">
                   <span>💻</span> ` + l.name + `
-                  ` + (l.isDone ? '<span class="text-emerald-400 text-[10px]">✅ مسلّم</span>' : '') + `
+                  ` + doneBadge + `
                 </div>
                 <div class="text-[10px] text-slate-400 mt-0.5">` + l.trackName + ' ↳ ' + l.courseName + `</div>
               </div>
-              ` + (isUrgent ? '<span class="badge bg-rose-900/60 text-rose-300 border border-rose-500/40 animate-pulse">⚠️ تسليم بعد ' + daysLeft + ' يوم!</span>' : '<span class="badge bg-slate-900 text-slate-400 font-mono">' + (daysLeft ? daysLeft + ' يوم' : '') + '</span>') + `
+              <span class="badge ` + (st.isUrgent ? 'bg-rose-900/80 text-rose-200 border border-rose-500/50 animate-pulse font-bold' : 'bg-slate-900 text-slate-400 font-mono') + `">` + st.label + `</span>
             </div>
             <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-white/5 text-[11px]">
-              <span class="font-mono text-slate-400">📅 الموعد: ` + (l.dueDate ? l.dueDate.replace('T', ' ') : 'غير محدد') + `</span>
+              <span class="font-mono text-slate-400 text-[10px]">📅 الموعد: ` + (l.dueDate ? l.dueDate.replace('T', ' ') : 'غير محدد') + `</span>
               <div class="flex items-center gap-1.5">
+                ` + linkBadge + `
+                ` + (l.chId ? `<button onclick="TaskAgent.toggleChapter('` + l.tid + `','` + l.cid + `','` + l.chId + `')" class="px-2 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/30 text-[10px] transition">
+                  ` + (l.isDone ? 'إلغاء الإنجاز' : '✅ تم الإنجاز') + `
+                </button>` : '') + `
                 <button onclick="DashboardAgent.downloadCalendarICS('` + l.name.replace(/'/g, '') + `', '` + l.dueDate + `')"
                         class="px-2 py-0.5 rounded bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-500/30 text-[10px] transition">
                   📅 تقويم (.ics)
@@ -2741,6 +3213,7 @@
     window.UI             = UI;
     window.DailyAgent     = DailyAgent;
     window.TaskAgent      = TaskAgent;
+    window.CalendarPicker = CalendarPicker;
     window.DashboardAgent = DashboardAgent;
     window.WeeklyView     = WeeklyView;
     window.MonthlyView    = MonthlyView;
