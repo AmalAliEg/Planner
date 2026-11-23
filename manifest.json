@@ -1,23 +1,26 @@
 {
-  "name": "مخطط الإنجاز الذكي | Adaptive Scheduler",
-  "short_name": "Scheduler",
-  "description": "نظام الجدولة وإدارة التعلم التكيفي اليومي والأسبوعي والشهري",
+  "name": "مخطط الإنجاز التكيفي | Adaptive Planner",
+  "short_name": "AdaptivePlanner",
+  "description": "نظام الجدولة وإدارة التعلم التكيفي اليومي والأسبوعي والشهري المرتبط بمواقيت الجيزة الفلكية",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#0f172a",
+  "background_color": "#080f1a",
   "theme_color": "#4f46e5",
+  "orientation": "portrait",
   "dir": "rtl",
   "lang": "ar",
   "icons": [
     {
       "src": "https://cdn-icons-png.flaticon.com/512/3652/3652191.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "https://cdn-icons-png.flaticon.com/512/3652/3652191.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

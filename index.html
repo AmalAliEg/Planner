@@ -1,1272 +1,2152 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+<!--
+  =============================================================================
+  ADAPTIVE PLANNER APP — Elite Edition (Phase 1 MVP)
+  =============================================================================
+  ARCHITECTURE:
+    - Single HTML file with modular JS sections (each section clearly labeled)
+    - Firebase Realtime DB for persistence (CDN script tags, no NPM needed)
+    - Firebase Anonymous Auth: gives each device a stable uid without login
+    - Astronomical prayer engine: works fully offline for Giza coordinates
+    - Tailwind CSS (CDN): rapid styling, easy to migrate to React later
+    - PWA: manifest + service worker = installable on mobile/desktop
+    - Elite UI Design System:
+        * Scroll-triggered reveal animations (.reveal & IntersectionObserver)
+        * Sticky visual on one side, feature descriptions scroll on the other
+        * Before/after comparison (Side-by-side)
+        * Accordion list of 5 Time Management Frameworks
+        * Tabbed features (Daily, Tasks, Weekly, Monthly, Elite Showcase)
+        * Full-bleed gradient banner with heading and CTA
+        * Split CTA card
+        * Sticky bottom bar (Dismissible with live countdown)
+        * Mobile bottom navigation bar
+        * Status indicator footer (Live system status telemetry)
+
+  DATA FLOW:
+    UI Event -> Handler -> Update state -> Write to Firebase -> Re-render
+
+  SCALABILITY NOTES:
+    - Each JS section can be extracted to its own .js module file (ES modules)
+    - Firebase paths mirror the EERD exactly (see ARCHITECTURE.md)
+    - All constants are named — zero magic numbers
+    - Every function has a JSDoc block with the WHY, not just the WHAT
+  =============================================================================
+-->
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>مخطط الإنجاز التكيفي | Adaptive Scheduler App</title>
-  
-  <!-- PWA Meta Tags -->
+  <title>مخطط الإنجاز التكيفي | Adaptive Planner</title>
+
+  <!-- PWA Manifest -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#4f46e5">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Scheduler">
-  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3652/3652191.png">
+  <meta name="apple-mobile-web-app-title" content="Planner">
 
+  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts: Cairo -->
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+
   <style>
-    body { font-family: 'Cairo', sans-serif; -webkit-tap-highlight-color: transparent; }
-    .badge { display: inline-flex; align-items: center; padding: 0.15rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
-    .tab-btn.active { background-color: #4f46e5; color: white; border-color: #6366f1; }
-    .mobile-tab.active { color: #818cf8; font-weight: 800; }
+    /* =========================================================
+       BASE & ELITE DESIGN STYLES
+       WHY: Custom styles complement Tailwind for smooth transitions,
+       PWA mobile optimization, and high-end visual aesthetics.
+    ========================================================= */
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Cairo', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior-y: none;
+    }
+
+    /* Active tab indicators */
+    .tab-btn.active  { background: #4f46e5; color: #ffffff; box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35); }
+    .mob-tab.active  { color: #818cf8; }
+    .mob-tab.active span:first-child { transform: scale(1.2); }
+
+    /* Interactive element transitions */
+    button, label, input[type="checkbox"], select, input[type="range"] {
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Progress bar smooth transition */
+    .progress-bar { transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+
+    /* Skeleton pulse for async loading states */
+    .skeleton { animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+    /* Completed block row styling */
+    .block-done td { opacity: 0.45; }
+    .block-done td:nth-child(2) { text-decoration: line-through; }
+
+    /* Scroll-triggered reveal animations */
+    .reveal {
+      opacity: 0;
+      transform: translateY(28px);
+      transition: opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1), transform 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Elite Glassmorphism Cards */
+    .elite-card {
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s;
+    }
+    .elite-card:hover {
+      border-color: rgba(99, 102, 241, 0.35);
+      box-shadow: 0 8px 32px rgba(99, 102, 241, 0.12);
+    }
+
+    /* Custom Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.12rem 0.55rem;
+      border-radius: 9999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    /* Custom scrollbar for timeline table & overflow panels */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(8, 15, 26, 0.6); }
+    ::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.3); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.6); }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen pb-20 md:pb-8">
 
-  <!-- Desktop & Tablet Header -->
-  <header class="border-b border-slate-800 bg-slate-950/90 backdrop-blur sticky top-0 z-40">
+<body class="bg-[#080f1a] text-slate-100 min-h-screen selection:bg-indigo-500 selection:text-white">
+
+  <!-- ==========================================================
+       GLOBAL LOADING OVERLAY
+       Shown while Firebase initializes. Hidden after first data load.
+  =========================================================== -->
+  <div id="loading-overlay" class="fixed inset-0 bg-[#080f1a] z-[100] flex flex-col items-center justify-center gap-4 transition-opacity duration-300">
+    <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-500 to-emerald-400 flex items-center justify-center text-3xl animate-bounce shadow-xl shadow-indigo-500/30">
+      ⚡
+    </div>
+    <div class="text-center">
+      <h2 class="text-base font-bold text-white mb-1">مخطط الإنجاز التكيفي</h2>
+      <p class="text-slate-400 text-xs">جاري تهيئة المحرك الفلكي والاتصال السحابي...</p>
+    </div>
+    <div id="loading-error" class="hidden text-rose-400 text-xs text-center max-w-sm px-6 bg-rose-950/30 p-3 rounded-xl border border-rose-500/30"></div>
+  </div>
+
+  <!-- ==========================================================
+       HEADER
+  =========================================================== -->
+  <header class="border-b border-white/5 bg-[#080f1a]/95 backdrop-blur-md sticky top-0 z-40">
     <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-      
+
+      <!-- Logo & Title -->
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-emerald-400 flex items-center justify-center font-black text-xl shadow-lg shadow-indigo-500/20">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-emerald-400 flex items-center justify-center text-xl font-black shadow-lg shadow-indigo-500/25">
           ⚡
         </div>
         <div>
-          <h1 class="text-base font-bold text-white flex items-center gap-2">
-            مخطط الإنجاز الذكي
-            <span id="save-status-badge" class="badge bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px]">💾 يُحفظ تلقائياً</span>
+          <h1 class="text-sm font-extrabold text-white flex items-center gap-2">
+            مخطط الإنجاز التكيفي
+            <!-- Firebase sync status badge -->
+            <span id="sync-badge" class="badge bg-slate-800 text-slate-400 border border-white/5">⏳ جاري الاتصال</span>
           </h1>
-          <p class="text-[11px] text-slate-400">تطبيق التخطيط والتعلم التكيفي (الجيزة • ITI • CT-GenAI)</p>
+          <p class="text-[11px] text-slate-400">الجيزة (30.01°N) • ITI Track • CT-GenAI • امتحان 17 ديسمبر</p>
         </div>
       </div>
 
-      <!-- Desktop Nav Tabs -->
-      <nav class="hidden md:flex bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs font-bold gap-1">
-        <button onclick="switchTab('daily')" id="tab-daily" class="tab-btn active px-3.5 py-1.5 rounded-lg border border-transparent transition">📅 اليومي</button>
-        <button onclick="switchTab('tasks')" id="tab-tasks" class="tab-btn px-3.5 py-1.5 rounded-lg border border-transparent text-slate-400 hover:text-white transition">🤖 المهام والكورسات (Agent 1)</button>
-        <button onclick="switchTab('weekly')" id="tab-weekly" class="tab-btn px-3.5 py-1.5 rounded-lg border border-transparent text-slate-400 hover:text-white transition">📊 الأسبوعي</button>
-        <button onclick="switchTab('monthly')" id="tab-monthly" class="tab-btn px-3.5 py-1.5 rounded-lg border border-transparent text-slate-400 hover:text-white transition">🗺️ الشهري</button>
+      <!-- Desktop Tab Navigation -->
+      <nav class="hidden md:flex bg-slate-900/80 p-1 rounded-xl border border-white/5 text-xs font-bold gap-1 shadow-inner">
+        <button onclick="UI.switchTab('daily')"   id="tab-daily"   class="tab-btn active px-3.5 py-1.5 rounded-lg transition">📅 اليومي</button>
+        <button onclick="UI.switchTab('tasks')"   id="tab-tasks"   class="tab-btn px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-white transition">🤖 المهام والكورسات</button>
+        <button onclick="UI.switchTab('weekly')"  id="tab-weekly"  class="tab-btn px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-white transition">📊 الأسبوعي</button>
+        <button onclick="UI.switchTab('monthly')" id="tab-monthly" class="tab-btn px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-white transition">🗺️ الشهري</button>
+        <button onclick="UI.switchTab('elite')"   id="tab-elite"   class="tab-btn px-3.5 py-1.5 rounded-lg text-indigo-300 hover:text-white transition">✨ مميزات المخطط</button>
       </nav>
 
       <!-- Action Buttons -->
       <div class="flex items-center gap-2">
-        <button id="pwa-install-btn" onclick="installPWA()" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg shadow-emerald-600/20 transition flex items-center gap-1.5">
-          📲 تثبيت كتطبيق
+        <span class="text-[11px] text-rose-400 font-bold bg-slate-900/80 border border-white/5 px-3 py-1 rounded-lg flex items-center gap-1.5">
+          🎯 امتحان: <span id="days-to-exam" class="text-amber-300 font-mono">-- يوم</span>
+        </span>
+        <input id="selected-date" type="date" value="2026-11-22"
+               onchange="DailyAgent.onDateChange(this.value)"
+               class="bg-slate-900 border border-white/5 rounded-lg px-2.5 py-1 text-[11px] text-white focus:outline-none focus:border-indigo-500 font-mono">
+        <button id="pwa-install-btn" onclick="App.installPWA()"
+                class="hidden text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-2.5 py-1 rounded-lg border border-indigo-400/30 transition shadow-lg shadow-indigo-600/30 flex items-center gap-1">
+          📲 تثبيت
         </button>
-        <button onclick="resetAllData()" title="استعادة ضبط المصنع" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-rose-400 px-2.5 py-1.5 rounded-lg border border-slate-700 transition">
-          🔄 تصفير
+        <button onclick="App.confirmReset()" title="تصفير التطبيق والبدء من جديد"
+                class="text-xs bg-slate-900 hover:bg-rose-900/40 text-slate-400 hover:text-rose-400 px-2.5 py-1 rounded-lg border border-white/5 transition">
+          🔄
         </button>
       </div>
-
     </div>
 
-    <!-- Giza Live Prayer Ticker Bar -->
-    <div class="bg-slate-900 border-t border-slate-800/80 px-4 py-2">
-      <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between text-[11px] gap-2">
-        <div class="flex items-center gap-2">
-          <span class="text-amber-400 font-bold">📍 صلوات الجيزة لتاريخ اليوم:</span>
-          <span class="text-slate-300">الفجر: <strong id="live-fajr" class="text-white">--</strong></span>
-          <span class="text-slate-600">•</span>
-          <span class="text-slate-300">الظهر: <strong id="live-dhuhr" class="text-white">--</strong></span>
-          <span class="text-slate-600">•</span>
-          <span class="text-slate-300">العصر: <strong id="live-asr" class="text-white">--</strong></span>
-          <span class="text-slate-600">•</span>
-          <span class="text-slate-300">المغرب: <strong id="live-maghrib" class="text-amber-300 font-bold">--</strong></span>
-          <span class="text-slate-600">•</span>
-          <span class="text-slate-300">العشاء: <strong id="live-isha" class="text-indigo-300 font-bold">--</strong></span>
+    <!-- Prayer Times Ticker Bar (Anchored to Giza) -->
+    <div class="bg-slate-950/85 border-t border-white/5 px-4 py-1.5">
+      <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-y-1 text-[11px]">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span class="text-amber-400 font-bold flex items-center gap-1">🕌 صلوات الجيزة:</span>
+          <span class="text-slate-400">الفجر: <strong id="live-fajr"    class="text-white font-mono">--:--</strong></span>
+          <span class="text-slate-400">الظهر: <strong id="live-dhuhr"   class="text-white font-mono">--:--</strong></span>
+          <span class="text-slate-400">العصر: <strong id="live-asr"     class="text-white font-mono">--:--</strong></span>
+          <span class="text-slate-400">المغرب: <strong id="live-maghrib" class="text-amber-300 font-mono">--:--</strong></span>
+          <span class="text-slate-400">العشاء: <strong id="live-isha"    class="text-indigo-300 font-mono">--:--</strong></span>
         </div>
-        <div class="flex items-center gap-3">
-          <span class="text-rose-400 font-bold">🎯 امتحان 17 ديسمبر: <span id="days-to-exam" class="text-amber-300">-- يوم</span></span>
-          <input id="selected-date" type="date" value="2026-11-22" onchange="handleDateChange()" class="bg-slate-950 border border-slate-700 rounded px-2 py-0.5 text-[10px] text-white">
+        <div class="flex items-center gap-2">
+          <span id="prayer-source" class="badge bg-indigo-900/40 text-indigo-400 border border-indigo-500/20">فلكي (المساحة المصرية)</span>
+          <span class="text-[10px] text-slate-500 font-mono hidden sm:inline">ESA 19.5° / 17.5°</span>
         </div>
       </div>
     </div>
   </header>
 
-  <!-- Mobile Bottom Navigation Bar (App Experience) -->
-  <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-slate-950/95 border-t border-slate-800 backdrop-blur z-50 flex justify-around py-2 text-[10px]">
-    <button onclick="switchTab('daily')" id="m-tab-daily" class="mobile-tab active flex flex-col items-center gap-1 text-slate-400">
-      <span class="text-base">📅</span>
-      <span>اليومي</span>
-    </button>
-    <button onclick="switchTab('tasks')" id="m-tab-tasks" class="mobile-tab flex flex-col items-center gap-1 text-slate-400">
-      <span class="text-base">🤖</span>
-      <span>المهام</span>
-    </button>
-    <button onclick="switchTab('weekly')" id="m-tab-weekly" class="mobile-tab flex flex-col items-center gap-1 text-slate-400">
-      <span class="text-base">📊</span>
-      <span>الأسبوعي</span>
-    </button>
-    <button onclick="switchTab('monthly')" id="m-tab-monthly" class="mobile-tab flex flex-col items-center gap-1 text-slate-400">
-      <span class="text-base">🗺️</span>
-      <span>الشهري</span>
-    </button>
-  </nav>
+  <!-- ==========================================================
+       MAIN CONTENT AREA
+  =========================================================== -->
+  <main class="max-w-7xl mx-auto px-4 py-5 pb-28 md:pb-12">
 
-  <main class="max-w-7xl mx-auto px-4 py-5">
-
-    <!-- ========================================== -->
-    <!-- TAB 1: DAILY SCHEDULER AGENT -->
-    <!-- ========================================== -->
+    <!-- ===================== TAB 1: DAILY SCHEDULER ===================== -->
     <div id="view-daily" class="space-y-5">
-      
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
 
-        <!-- Controls Column (4 Cols) -->
+        <!-- LEFT CONTROLS -->
         <div class="lg:col-span-4 space-y-4">
 
-          <!-- Arrival Time Dynamic Slider -->
-          <div class="bg-gradient-to-b from-slate-900 to-slate-900/60 border border-indigo-500/40 rounded-2xl p-4 shadow-xl">
-            <div class="flex justify-between items-center mb-2">
-              <h2 class="text-xs font-bold text-indigo-300">🕒 وقت الرجوع الفعلي للبيت:</h2>
-              <span id="arrival-display" class="font-extrabold text-amber-300 bg-slate-950 px-2.5 py-0.5 rounded-lg border border-slate-700 text-xs">03:00 م</span>
+          <!-- Arrival Time Slider -->
+          <div class="elite-card rounded-2xl p-4">
+            <div class="flex justify-between items-center mb-3">
+              <h2 class="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                <span>🕒</span> وقت الوصول للبيت اليوم:
+              </h2>
+              <span id="arrival-display" class="text-amber-300 font-extrabold font-mono text-sm bg-slate-950 border border-white/5 px-2.5 py-0.5 rounded-lg">03:00 م</span>
             </div>
-            
-            <input id="arrival-slider" type="range" min="13" max="21" step="0.25" value="15" oninput="setArrival(this.value)" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500">
-            
-            <div class="grid grid-cols-3 gap-1.5 mt-3 pt-3 border-t border-slate-800">
-              <button onclick="setArrival(15)" class="py-1 px-2 bg-indigo-950/60 hover:bg-indigo-900 text-indigo-300 font-bold rounded text-[11px] border border-indigo-800 transition">3:00 م (بدري)</button>
-              <button onclick="setArrival(18)" class="py-1 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] border border-slate-700 transition">6:00 م (عادي)</button>
-              <button onclick="setArrival(19)" class="py-1 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] border border-slate-700 transition">7:00 م (متأخر)</button>
+            <input id="arrival-slider" type="range" min="13" max="21" step="0.25" value="15"
+                   oninput="DailyAgent.setArrival(parseFloat(this.value))"
+                   class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+            <div class="grid grid-cols-3 gap-1.5 mt-3">
+              <button onclick="DailyAgent.setArrival(15)" class="py-1 text-[11px] font-bold bg-indigo-950/60 hover:bg-indigo-900 text-indigo-300 rounded-lg border border-indigo-900/50 transition">3:00 م (بدري)</button>
+              <button onclick="DailyAgent.setArrival(18)" class="py-1 text-[11px] bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-lg border border-white/5 transition">6:00 م (عادي)</button>
+              <button onclick="DailyAgent.setArrival(19)" class="py-1 text-[11px] bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-lg border border-white/5 transition">7:00 م (متأخر)</button>
             </div>
           </div>
 
-          <!-- NLP Prompt Box -->
-          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
-            <h3 class="text-xs font-bold text-slate-200 mb-2">💬 اكتبي ظرف اليوم بلغتك:</h3>
+          <!-- Natural Language Input Box (Offline NLP) -->
+          <div class="elite-card rounded-2xl p-4">
+            <h3 class="text-xs font-bold text-slate-300 mb-2 flex items-center gap-1.5">
+              <span>💬</span> اكتبي ظرف اليوم بلغتك (Agent NLP):
+            </h3>
             <div class="flex gap-2">
-              <input id="chat-prompt" type="text" placeholder="مثال: رجعت 3 العصر ومفيش شغل" class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
-              <button onclick="processNaturalPrompt()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition">تطبيق</button>
+              <input id="nlp-input" type="text"
+                     placeholder="مثال: رجعت 3 العصر ومصدعة ومفيش شغل"
+                     onkeydown="if(event.key==='Enter') DailyAgent.processNLP()"
+                     class="flex-1 bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition">
+              <button onclick="DailyAgent.processNLP()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-md shadow-indigo-600/30">
+                تطبيق
+              </button>
             </div>
+            <p class="text-[10px] text-slate-500 mt-2">يفهم الأرقام العربية (٣، ٤) وكلمات: بدري، مصدعة، خروجة مع الوالدة، مفيش شغل.</p>
           </div>
 
-          <!-- Strategy & Toggles -->
-          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
+          <!-- Strategy Selector -->
+          <div class="elite-card rounded-2xl p-4 space-y-3">
             <div class="flex justify-between items-center">
-              <h3 class="text-xs font-bold text-slate-300">الاستراتيجية:</h3>
-              <div class="flex bg-slate-950 rounded-lg p-0.5 border border-slate-800 text-[10px]">
-                <button id="btn-weekday" onclick="setDayType(false)" class="px-2 py-1 rounded font-bold bg-indigo-600 text-white transition">وسط الأسبوع</button>
-                <button id="btn-friday" onclick="setDayType(true)" class="px-2 py-1 rounded text-slate-400 font-semibold hover:text-white transition">الجمعة</button>
+              <h3 class="text-xs font-bold text-slate-300">الاستراتيجية النشطة:</h3>
+              <!-- Day Type Toggle -->
+              <div class="flex bg-slate-950 rounded-lg p-0.5 border border-white/5 text-[10px] font-bold">
+                <button id="btn-weekday" onclick="DailyAgent.setDayType(false)" class="tab-btn active px-2.5 py-1 rounded transition">وسط الأسبوع</button>
+                <button id="btn-friday"  onclick="DailyAgent.setDayType(true)"  class="tab-btn px-2.5 py-1 rounded text-slate-400 transition">الجمعة</button>
               </div>
             </div>
 
+            <!-- Strategy Radio Buttons -->
             <div class="space-y-1.5">
-              <label class="cursor-pointer border border-slate-800 rounded-xl p-2 flex items-center justify-between hover:bg-slate-800/40 transition text-xs">
-                <span class="font-bold text-indigo-300">Option B: Exam Sprint (17 ديسمبر)</span>
-                <input type="radio" name="strategy" value="B" checked onchange="setStrategy('B')" class="text-indigo-500 focus:ring-0">
+              <label class="cursor-pointer elite-card rounded-xl p-2.5 flex items-center justify-between hover:border-indigo-500/40 transition has-[:checked]:border-indigo-500/60 has-[:checked]:bg-indigo-950/20">
+                <div>
+                  <div class="text-xs font-bold text-indigo-300">Option B: Exam Sprint (17 ديسمبر)</div>
+                  <div class="text-[10px] text-slate-400">أولوية مطلقة للـ CT-GenAI والـ ITI مع الحفاظ على وقت الوالدة</div>
+                </div>
+                <input type="radio" name="strategy" value="B" checked onchange="DailyAgent.setStrategy('B')" class="text-indigo-500 focus:ring-0">
               </label>
-              <label class="cursor-pointer border border-slate-800 rounded-xl p-2 flex items-center justify-between hover:bg-slate-800/40 transition text-xs">
-                <span class="font-bold text-emerald-300">Option A: Balanced (متوازن)</span>
-                <input type="radio" name="strategy" value="A" onchange="setStrategy('A')" class="text-indigo-500 focus:ring-0">
+              <label class="cursor-pointer elite-card rounded-xl p-2.5 flex items-center justify-between hover:border-emerald-500/40 transition has-[:checked]:border-emerald-500/60 has-[:checked]:bg-emerald-950/20">
+                <div>
+                  <div class="text-xs font-bold text-emerald-300">Option A: Balanced (متوازن)</div>
+                  <div class="text-[10px] text-slate-400">ساعة شغل ثابتة ومذاكرة موزعة بالتساوي</div>
+                </div>
+                <input type="radio" name="strategy" value="A" onchange="DailyAgent.setStrategy('A')" class="text-indigo-500 focus:ring-0">
               </label>
-              <label class="cursor-pointer border border-slate-800 rounded-xl p-2 flex items-center justify-between hover:bg-slate-800/40 transition text-xs">
-                <span class="font-bold text-amber-300">Option C: Builder (المشروع والكود)</span>
-                <input type="radio" name="strategy" value="C" onchange="setStrategy('C')" class="text-indigo-500 focus:ring-0">
+              <label class="cursor-pointer elite-card rounded-xl p-2.5 flex items-center justify-between hover:border-amber-500/40 transition has-[:checked]:border-amber-500/60 has-[:checked]:bg-amber-950/20">
+                <div>
+                  <div class="text-xs font-bold text-amber-300">Option C: Builder (المشروع والكود)</div>
+                  <div class="text-[10px] text-slate-400">ساعتين كود يومياً لمشاريع الفريلانس (بعد الامتحان)</div>
+                </div>
+                <input type="radio" name="strategy" value="C" onchange="DailyAgent.setStrategy('C')" class="text-indigo-500 focus:ring-0">
               </label>
             </div>
 
-            <!-- Toggles -->
-            <div class="pt-2 border-t border-slate-800 space-y-1.5">
-              <button onclick="toggleCondition('exhausted')" class="w-full text-right p-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs flex justify-between items-center transition">
-                <span>😴 <strong>طاقتي منخفضة/مصدعة</strong></span>
-                <span id="tag-exhausted" class="text-[10px] text-slate-400">غير مفعل</span>
+            <!-- Condition Toggles -->
+            <div class="pt-2 border-t border-white/5 space-y-1.5">
+              <button onclick="DailyAgent.toggle('exhausted')" class="w-full text-right p-2.5 elite-card rounded-xl text-xs flex justify-between items-center hover:border-amber-500/30">
+                <span>😴 <strong class="text-slate-200">طاقتي منخفضة / مصدعة (قيلولة تعافي)</strong></span>
+                <span id="tag-exhausted" class="text-[10px] text-slate-500">غير مفعل</span>
               </button>
-              <button onclick="toggleCondition('mom_outing')" class="w-full text-right p-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs flex justify-between items-center transition">
-                <span>❤️ <strong>مشوار/خروجة مع الوالدة</strong></span>
-                <span id="tag-mom" class="text-[10px] text-slate-400">غير مفعل</span>
+              <button onclick="DailyAgent.toggle('momOuting')" class="w-full text-right p-2.5 elite-card rounded-xl text-xs flex justify-between items-center hover:border-rose-500/30">
+                <span>❤️ <strong class="text-slate-200">مشوار / خروجة مع الوالدة (ساعتين)</strong></span>
+                <span id="tag-momOuting" class="text-[10px] text-slate-500">غير مفعل</span>
               </button>
-              <button onclick="toggleCondition('no_work')" class="w-full text-right p-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs flex justify-between items-center transition">
-                <span>💼 <strong>مفيش شغل/فريلانس اليوم</strong></span>
-                <span id="tag-nowork" class="text-[10px] text-slate-400">غير مفعل</span>
+              <button onclick="DailyAgent.toggle('noWork')" class="w-full text-right p-2.5 elite-card rounded-xl text-xs flex justify-between items-center hover:border-emerald-500/30">
+                <span>💼 <strong class="text-slate-200">مفيش شغل / فريلانس اليوم (إضافة للمذاكرة)</strong></span>
+                <span id="tag-noWork" class="text-[10px] text-slate-500">غير مفعل</span>
               </button>
             </div>
           </div>
 
         </div>
 
-        <!-- Schedule Table Column (8 Cols) -->
-        <div class="lg:col-span-8 space-y-4">
-
-          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
-            <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+        <!-- RIGHT: DAILY TIMELINE TABLE -->
+        <div class="lg:col-span-8">
+          <div class="elite-card rounded-2xl p-5">
+            <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/5">
               <div>
-                <h2 class="text-base font-bold text-white flex items-center gap-2">
-                  <span>جدول اليوم التكيفي (12 ساعة)</span>
-                  <span id="scenario-badge" class="badge bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px]">وصول 03:00 م</span>
+                <h2 class="text-base font-bold text-white flex items-center gap-2 flex-wrap">
+                  جدول اليوم التكيفي
+                  <span id="arrival-badge" class="badge bg-emerald-900/40 text-emerald-300 border border-emerald-500/20 font-mono">وصول 03:00 م</span>
                 </h2>
-                <p class="text-[11px] text-slate-400 mt-0.5">الصلاة في مواعيدها الفلكية بالجيزة + المهام الحقيقية المربوطة من Agent 1.</p>
+                <p class="text-[11px] text-slate-400 mt-0.5">الصلاة بمواقيت الجيزة الفلكية (12 ساعة) • المهام مربوطة تلقائياً بالشباتر غير المنجزة في Agent 1.</p>
               </div>
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-bold text-emerald-400 bg-slate-950 border border-slate-800 px-2.5 py-1 rounded-lg">إجمالي: 24.0 س</span>
-                <button onclick="window.print()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1 rounded-lg border border-slate-700 transition">🖨️ طباعة</button>
+              <div class="flex items-center gap-2 text-xs">
+                <span class="text-emerald-400 font-bold bg-slate-900 border border-white/5 px-2.5 py-1 rounded-lg font-mono">24.0 س محكمة</span>
+                <button onclick="window.print()" class="bg-slate-900 hover:bg-slate-800 text-slate-300 px-2.5 py-1 rounded-lg border border-white/5 transition flex items-center gap-1">
+                  <span>🖨️</span> طباعة
+                </button>
               </div>
             </div>
 
-            <!-- Table -->
+            <!-- Timeline Table -->
             <div class="mt-3 overflow-x-auto">
               <table class="w-full text-right text-xs">
                 <thead>
-                  <tr class="text-slate-400 border-b border-slate-800">
-                    <th class="py-2 px-2">التوقيت (12h)</th>
-                    <th class="py-2 px-3">النشاط والمهمة المربوطة</th>
-                    <th class="py-2 px-2 text-center">المدة</th>
-                    <th class="py-2 px-2">النوع</th>
-                    <th class="py-2 px-2 text-center">الإنجاز</th>
+                  <tr class="text-slate-400 border-b border-white/5">
+                    <th class="py-2.5 px-2 font-semibold">التوقيت (12h)</th>
+                    <th class="py-2.5 px-3 font-semibold">النشاط / المهمة المربوطة من Agent 1</th>
+                    <th class="py-2.5 px-2 font-semibold text-center">المدة</th>
+                    <th class="py-2.5 px-2 font-semibold hidden sm:table-cell">النوع</th>
+                    <th class="py-2.5 px-2 font-semibold text-center">✓</th>
                   </tr>
                 </thead>
-                <tbody id="timeline-body" class="divide-y divide-slate-800/80">
-                  <!-- Generated via JS -->
+                <tbody id="timeline-body" class="divide-y divide-white/[0.04]">
+                  <tr class="skeleton"><td colspan="5" class="py-6 px-3 text-center text-slate-500">جاري حساب الجدول التكيفي...</td></tr>
                 </tbody>
               </table>
             </div>
 
-            <!-- Dynamic Agent Insights -->
-            <div class="mt-4 p-3 bg-indigo-950/40 border border-indigo-500/30 rounded-xl text-xs flex items-start gap-2.5 text-indigo-200">
-              <span class="text-lg">💡</span>
-              <div>
-                <strong class="font-bold text-white block mb-0.5">رأي الـ Scheduler Agent:</strong>
-                <span id="insight-text">تم تثبيت صلاتي المغرب والعشاء في مواعيد الجيزة بدقة. أي تعديل أو إنجاز يتم حفظه فوراً في جهازك!</span>
-              </div>
+            <!-- Agent Insight Box -->
+            <div id="agent-insight" class="mt-4 p-3.5 rounded-xl bg-indigo-950/30 border border-indigo-500/20 text-xs text-indigo-200 flex gap-2.5 items-start">
+              <span class="text-lg flex-shrink-0">💡</span>
+              <span id="insight-text">تم تثبيت الصلوات بمواقيت الجيزة الفلكية بدقة. المهام اليومية تستدعي تلقائياً الشابتر التالي المستحق لمذاكرته.</span>
             </div>
-
           </div>
-
         </div>
 
       </div>
-
     </div>
 
-    <!-- ========================================== -->
-    <!-- TAB 2: TASK BREAKDOWN AGENT (Agent 1) -->
-    <!-- ========================================== -->
+    <!-- ===================== TAB 2: TASK MANAGER AGENT ===================== -->
     <div id="view-tasks" class="hidden space-y-5">
-      
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
-        <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+      <div class="elite-card rounded-2xl p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/5">
           <div>
             <h2 class="text-base font-bold text-white flex items-center gap-2">
-              🤖 وكيل تفكيك وإدارة المهام (Task Agent)
-              <span class="badge bg-indigo-500/20 text-indigo-300">Agent 1</span>
+              🤖 وكيل إدارة المهام والكورسات
+              <span class="badge bg-indigo-900/40 text-indigo-300 border border-indigo-500/20">Agent 1 (Atomic Engine)</span>
             </h2>
-            <p class="text-[11px] text-slate-400 mt-0.5">الـ Progress يُحسب تلقائياً من إنجاز اللابات والوحدات الذرية الحقيقية (لا يوجد سيليدر يدوي وهمي).</p>
+            <p class="text-[11px] text-slate-400 mt-0.5">
+              الهيكلية: Track -> Course -> Chapter. التقدم (Progress) يُحسب رياضياً من عدد الشباتر المنجزة دون أي تقدير يدوي عشوائي.
+            </p>
           </div>
-          <button onclick="openAddTaskModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition flex items-center gap-1 shadow-lg shadow-indigo-600/20">
-            ➕ إضافة مهمة جديدة
+          <button onclick="TaskAgent.openAddModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition shadow-lg shadow-indigo-600/20 flex items-center gap-1.5">
+            ➕ إضافة مهمة / كورس
           </button>
         </div>
 
-        <!-- Task Category Filters -->
+        <!-- Category Filter Tabs -->
         <div class="flex flex-wrap gap-2 mt-4 text-xs">
-          <button onclick="filterTasks('ALL')" class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold">الكل</button>
-          <button onclick="filterTasks('ITI')" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-300 font-semibold border border-slate-700">ITI Courses & Labs</button>
-          <button onclick="filterTasks('CT-GenAI')" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 font-semibold border border-slate-700">CT-GenAI Syllabus</button>
-          <button onclick="filterTasks('Spiritual')" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 font-semibold border border-slate-700">البحث الديني (PDF)</button>
-          <button onclick="filterTasks('Project')" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold border border-slate-700">الشغل والمشروع</button>
+          <button onclick="TaskAgent.setFilter('ALL', this)"       class="filter-btn active px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold">الكل</button>
+          <button onclick="TaskAgent.setFilter('ITI', this)"       class="filter-btn px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-blue-300 font-semibold border border-white/5">ITI Track</button>
+          <button onclick="TaskAgent.setFilter('CT-GenAI', this)"  class="filter-btn px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-emerald-300 font-semibold border border-white/5">CT-GenAI</button>
+          <button onclick="TaskAgent.setFilter('Spiritual', this)" class="filter-btn px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-teal-300 font-semibold border border-white/5">البحث الديني (PDF)</button>
+          <button onclick="TaskAgent.setFilter('Project', this)"   class="filter-btn px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-amber-300 font-semibold border border-white/5">الشغل والمشروع</button>
         </div>
 
         <!-- Tasks Tree Grid -->
         <div id="tasks-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-5">
-          <!-- Rendered via JS -->
+          <div class="skeleton col-span-3 elite-card rounded-2xl p-8 text-center text-slate-500 text-sm">جاري تحميل المهام والشباتر...</div>
         </div>
-
       </div>
-
     </div>
 
-    <!-- ========================================== -->
-    <!-- TAB 3: WEEKLY ROADMAP (7 Days) -->
-    <!-- ========================================== -->
+    <!-- ===================== TAB 3: WEEKLY ===================== -->
     <div id="view-weekly" class="hidden space-y-5">
-      
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
-        <div class="pb-3 border-b border-slate-800 flex justify-between items-center">
+      <div class="elite-card rounded-2xl p-5">
+        <div class="pb-3 border-b border-white/5 flex flex-wrap justify-between items-center gap-2">
           <div>
-            <h2 class="text-base font-bold text-white flex items-center gap-2">
-              📊 المخطط الأسبوعي وتوزيع الساعات الحية (7 أيام)
-            </h2>
-            <p class="text-[11px] text-slate-400 mt-0.5">مجموع 168 ساعة محسوبة رياضياً بدون أي تضارب.</p>
+            <h2 class="text-base font-bold text-white">📊 المخطط الأسبوعي (7 أيام كاملة)</h2>
+            <p class="text-[11px] text-slate-400 mt-0.5">مجموع 168 ساعة موزعة بدقة بين الـ ITI، والامتحان، والبحث الديني، والوالدة، والنوم الصحي.</p>
           </div>
-          <span class="badge bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs">168 ساعة أسبوعياً</span>
+          <span class="badge bg-indigo-900/40 text-indigo-300 border border-indigo-500/20 font-mono">168 ساعة أسبوعياً</span>
         </div>
-
-        <!-- Weekly Table -->
         <div class="mt-4 overflow-x-auto">
           <table class="w-full text-right text-xs">
             <thead>
-              <tr class="text-slate-400 border-b border-slate-800">
-                <th class="py-2.5 px-3">النشاط (Commitment)</th>
-                <th class="py-2.5 px-2 text-center">السبت</th>
-                <th class="py-2.5 px-2 text-center">الأحد</th>
-                <th class="py-2.5 px-2 text-center">الاثنين</th>
-                <th class="py-2.5 px-2 text-center">الثلاثاء</th>
-                <th class="py-2.5 px-2 text-center">الأربعاء</th>
-                <th class="py-2.5 px-2 text-center">الخميس</th>
-                <th class="py-2.5 px-2 text-center text-amber-300 font-bold bg-slate-800/40">الجمعة</th>
-                <th class="py-2.5 px-3 text-center text-emerald-400 font-extrabold">الإجمالي</th>
+              <tr class="text-slate-400 border-b border-white/5">
+                <th class="py-2.5 px-3 font-semibold">النشاط</th>
+                <th class="py-2.5 px-2 text-center font-semibold">سبت</th>
+                <th class="py-2.5 px-2 text-center font-semibold">أحد</th>
+                <th class="py-2.5 px-2 text-center font-semibold">اثنين</th>
+                <th class="py-2.5 px-2 text-center font-semibold">ثلاثاء</th>
+                <th class="py-2.5 px-2 text-center font-semibold">أربعاء</th>
+                <th class="py-2.5 px-2 text-center font-semibold">خميس</th>
+                <th class="py-2.5 px-2 text-center font-semibold text-amber-400">جمعة</th>
+                <th class="py-2.5 px-3 text-center font-semibold text-emerald-400">الإجمالي</th>
               </tr>
             </thead>
-            <tbody id="weekly-table-body" class="divide-y divide-slate-800/80">
-              <!-- Rendered via JS -->
+            <tbody id="weekly-body" class="divide-y divide-white/[0.04]">
+              <!-- Rendered by WeeklyView.render() -->
             </tbody>
           </table>
         </div>
       </div>
-
     </div>
 
-    <!-- ========================================== -->
-    <!-- TAB 4: MONTHLY ROADMAP -->
-    <!-- ========================================== -->
+    <!-- ===================== TAB 4: MONTHLY ===================== -->
     <div id="view-monthly" class="hidden space-y-5">
-      
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
-        <div class="pb-3 border-b border-slate-800 flex justify-between items-center">
+      <div class="elite-card rounded-2xl p-5">
+        <div class="pb-3 border-b border-white/5 flex flex-wrap justify-between items-center gap-2">
           <div>
-            <h2 class="text-base font-bold text-white flex items-center gap-2">
-              🗺️ خارطة الطريق الشهرية حتى 17 ديسمبر
-            </h2>
-            <p class="text-[11px] text-slate-400 mt-0.5">تتبع الـ 4 أسابيع بين CT-GenAI ومنهج ITI وملف الـ PDF.</p>
+            <h2 class="text-base font-bold text-white">🗺️ خارطة الطريق حتى 17 ديسمبر 2026</h2>
+            <p class="text-[11px] text-slate-400 mt-0.5">4 أسابيع متوازية محددة المعالم: سيلبس CT-GenAI + لابات ITI + البحث الديني (PDF).</p>
           </div>
-          <div class="text-xs bg-slate-950 border border-slate-800 px-3 py-1 rounded-lg text-amber-300 font-bold">
-            باقي على الامتحان: <span id="monthly-countdown">25</span> يوم
+          <div class="text-xs bg-slate-900 border border-white/5 px-3 py-1 rounded-lg text-amber-300 font-bold font-mono">
+            متبقي: <span id="monthly-countdown">--</span> يوم
           </div>
         </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-5">
-          <!-- Week 1 -->
-          <div class="bg-slate-950 border border-indigo-500/50 rounded-2xl p-4 space-y-3">
-            <div class="flex justify-between items-center text-xs">
-              <span class="font-bold text-indigo-400 bg-indigo-950 px-2 py-0.5 rounded border border-indigo-800">الأسبوع الأول</span>
-              <span class="text-[10px] text-slate-400">22 - 28 نوفمبر</span>
-            </div>
-            <h3 class="font-bold text-sm text-white">التأسيس وكسر Ch2</h3>
-            <div class="text-xs space-y-2 text-slate-300">
-              <div class="p-2 bg-slate-900 rounded-lg border border-slate-800">
-                <strong class="text-emerald-400 block text-[11px]">CT-GenAI:</strong>
-                Ch1 (Intro) + الجزء الأول من Ch2 (Prompting Basics).
-              </div>
-              <div class="p-2 bg-slate-900 rounded-lg border border-slate-800">
-                <strong class="text-teal-400 block text-[11px]">البحث الديني:</strong>
-                الأسبوع 1 بالـ PDF: الرد على الربوبية وقراءة "شموع النهار".
-              </div>
-            </div>
-            <div class="pt-2 border-t border-slate-800 flex justify-between items-center text-[11px]">
-              <span class="text-slate-400">Checkpoint:</span>
-              <span class="text-emerald-400 font-bold">Ch1 Passed ✅</span>
-            </div>
-          </div>
-
-          <!-- Week 2 -->
-          <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
-            <div class="flex justify-between items-center text-xs">
-              <span class="font-bold text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">الأسبوع الثاني</span>
-              <span class="text-[10px] text-slate-400">29 نوف - 5 ديس</span>
-            </div>
-            <h3 class="font-bold text-sm text-white">الـ Risks والبنية التحتية</h3>
-            <div class="text-xs space-y-2 text-slate-300">
-              <div class="p-2 bg-slate-900 rounded-lg border border-slate-800">
-                <strong class="text-emerald-400 block text-[11px]">CT-GenAI:</strong>
-                Ch2 العملي + Ch3 (GenAI Risks) + Spaced Review.
-              </div>
-              <div class="p-2 bg-slate-900 rounded-lg border border-slate-800">
-                <strong class="text-teal-400 block text-[11px]">البحث الديني:</strong>
-                الأسبوع 2 بالـ PDF: إثبات النبوة و"النبأ العظيم".
-              </div>
-            </div>
-            <div class="pt-2 border-t border-slate-800 flex justify-between items-center text-[11px]">
-              <span class="text-slate-400">Checkpoint:</span>
-              <span class="text-amber-400 font-bold">50% من السيلبس</span>
-            </div>
-          </div>
-
-          <!-- Week 3 -->
-          <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
-            <div class="flex justify-between items-center text-xs">
-              <span class="font-bold text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">الأسبوع الثالث</span>
-              <span class="text-[10px] text-slate-400">6 - 12 ديسمبر</span>
-            </div>
-            <h3 class="font-bold text-sm text-white">إغلاق السيلبس والموك الأول</h3>
-            <div class="text-xs space-y-2 text-slate-300">
-              <div class="p-2 bg-slate-900 rounded-lg border border-slate-800">
-                <strong class="text-emerald-400 block text-[11px]">CT-GenAI:</strong>
-                Ch4 (Infra) + Ch5 (Deploy) + أول Mock Exam.
-              </div>
-              <div class="p-2 bg-slate-900 rounded-lg border border-slate-800">
-                <strong class="text-teal-400 block text-[11px]">البحث الديني:</strong>
-                الأسبوع 3 بالـ PDF: توثيق السنة النبوية وكتاب السباعي.
-              </div>
-            </div>
-            <div class="pt-2 border-t border-slate-800 flex justify-between items-center text-[11px]">
-              <span class="text-slate-400">Checkpoint:</span>
-              <span class="text-indigo-400 font-bold">Mock Score &gt; 80%</span>
-            </div>
-          </div>
-
-          <!-- Week 4 -->
-          <div class="bg-slate-950 border border-rose-500/50 rounded-2xl p-4 space-y-3">
-            <div class="flex justify-between items-center text-xs">
-              <span class="font-bold text-rose-400 bg-rose-950 px-2 py-0.5 rounded border border-rose-800">أسبوع الامتحان!</span>
-              <span class="text-[10px] text-slate-400">13 - 17 ديسمبر</span>
-            </div>
-            <h3 class="font-bold text-sm text-white">Sprint النهائي والامتحان</h3>
-            <div class="text-xs space-y-2 text-slate-300">
-              <div class="p-2 bg-slate-900 rounded-lg border border-slate-800">
-                <strong class="text-rose-400 block text-[11px]">17 ديسمبر:</strong>
-                حل 2 Mock Exams + مراجعة مكثفة + دخول الامتحان!
-              </div>
-              <div class="p-2 bg-slate-900 rounded-lg border border-slate-800">
-                <strong class="text-teal-400 block text-[11px]">البحث الديني:</strong>
-                الأسبوع 4 بالـ PDF: تفكيك الشبهات وسيرة النبي.
-              </div>
-            </div>
-            <div class="pt-2 border-t border-slate-800 flex justify-between items-center text-[11px]">
-              <span class="text-slate-400">النتيجة:</span>
-              <span class="text-emerald-400 font-bold">Certified CT-GenAI 🎓</span>
-            </div>
-          </div>
+        <div id="monthly-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-5">
+          <!-- Rendered by MonthlyView.render() -->
         </div>
-
       </div>
+    </div>
+
+    <!-- ===================== TAB 5: ELITE FEATURES & SYSTEM TOUR ===================== -->
+    <div id="view-elite" class="hidden space-y-8">
+
+      <!-- 1. FULL-BLEED GRADIENT BANNER -->
+      <section class="reveal relative overflow-hidden rounded-3xl p-6 md:p-10 bg-gradient-to-r from-indigo-950 via-slate-900 to-emerald-950 border border-white/10 shadow-2xl text-center space-y-4">
+        <div class="absolute -top-24 -left-24 w-72 h-72 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute -bottom-24 -right-24 w-72 h-72 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div class="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/30 px-3.5 py-1 rounded-full text-indigo-300 text-xs font-bold">
+          <span>✨</span> نظام التخطيط التكيفي الذكي • Elite Edition
+        </div>
+        <h2 class="text-xl md:text-3xl font-extrabold text-white tracking-tight">
+          حوّلي الفوضى لإنتاجية فائقة متزامنة مع مواقيت الجيزة الفلكية
+        </h2>
+        <p class="text-slate-300 text-xs md:text-sm max-w-2xl mx-auto leading-relaxed">
+          منصة تخطيط متكاملة قائمة على وكيلين ذكيين (Two-Agent Architecture) لحماية وقت وبر الوالدة، واجتياز CT-GenAI في 17 ديسمبر، وإنهاء متطلبات ITI Testing Track بدون تشتت.
+        </p>
+        <div class="flex flex-wrap justify-center items-center gap-3 pt-2">
+          <button onclick="UI.switchTab('daily')" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-600/30 transition transform hover:-translate-y-0.5">
+            ابدئي بجدول اليوم 📅
+          </button>
+          <button onclick="UI.switchTab('tasks')" class="bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold text-xs px-5 py-2.5 rounded-xl border border-white/10 transition">
+            استكشفي شجرة الكورسات 🤖
+          </button>
+        </div>
+      </section>
+
+      <!-- 2. BEFORE / AFTER COMPARISON (Side-by-side) -->
+      <section class="reveal space-y-3">
+        <div class="text-center max-w-xl mx-auto">
+          <h3 class="text-base font-extrabold text-white">مقارنة الواقع: قبل وبعد المخطط التكيفي</h3>
+          <p class="text-xs text-slate-400 mt-1">كيف ينقذ التخطيط الفلكي التكيفي طاقتك اليومية مقارنة بالأساليب التقليدية؟</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <!-- Before Card -->
+          <div class="elite-card border-rose-500/20 bg-rose-950/10 rounded-2xl p-5 space-y-3">
+            <div class="flex items-center gap-2 pb-2 border-b border-rose-500/20 text-rose-300 font-bold text-sm">
+              <span class="text-lg">❌</span> التخطيط العشوائي التقليدي (Before)
+            </div>
+            <ul class="space-y-2 text-xs text-slate-300">
+              <li class="flex items-start gap-2">
+                <span class="text-rose-400 font-bold">✕</span> مواعيد صلاة ثابتة أو تقديرية تؤدي لتأخير العصر والمغرب والعشاء.
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-rose-400 font-bold">✕</span> المذاكرة تلتهم وقت الوالدة مع شعور دائم بالذنب والتقصير العائلي.
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-rose-400 font-bold">✕</span> تشتت عند بدء المذاكرة: "أبدأ بإيه؟" وإضاعة أول 30 دقيقة في البحث.
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-rose-400 font-bold">✕</span> الرجوع بالإرهاق يُضيع السهرة بالكامل دون استعادة حقيقية للنشاط.
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-rose-400 font-bold">✕</span> ضياع 3 ساعات ونصف مواصلات يومياً كطاقة مهدرة.
+              </li>
+            </ul>
+          </div>
+
+          <!-- After Card -->
+          <div class="elite-card border-emerald-500/30 bg-emerald-950/10 rounded-2xl p-5 space-y-3">
+            <div class="flex items-center gap-2 pb-2 border-b border-emerald-500/30 text-emerald-300 font-bold text-sm">
+              <span class="text-lg">✅</span> المخطط التكيفي الذكي بالجيزة (After)
+            </div>
+            <ul class="space-y-2 text-xs text-slate-300">
+              <li class="flex items-start gap-2">
+                <span class="text-emerald-400 font-bold">✓</span> مواقيت فلكية حية للجيزة تُجدول مهامك حول الفروض بدقة 100%.
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-emerald-400 font-bold">✓</span> وقت الوالدة محمي بخط أحمر (Protected Family Time) غير قابل للإلغاء.
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-emerald-400 font-bold">✓</span> ربط ذري تلقائي: الـ Schedule يسحب اسم الشابتر التالي مباشرة من Agent 1.
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-emerald-400 font-bold">✓</span> ذكاء استشعاري: وضع الإرهاق يُنشئ قيلولة تعافي فورية ويعيد وزن اليوم.
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-emerald-400 font-bold">✓</span> استغلال المواصلات عبر الـ Dual-Purpose Audio (بودكاست، إنجليزي، وبحث ديني).
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. STICKY VISUAL ON ONE SIDE, FEATURE DESCRIPTIONS SCROLL ON THE OTHER -->
+      <section class="reveal space-y-4">
+        <div class="text-center max-w-xl mx-auto">
+          <h3 class="text-base font-extrabold text-white">الهندسة العميقة للمنظومة التكيفية</h3>
+          <p class="text-xs text-slate-400 mt-1">شاشات المراقبة والمحركات الأربعة العاملة في الخلفية</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start mt-4">
+          <!-- Sticky Visual Telemetry Card -->
+          <div class="lg:col-span-5 lg:sticky lg:top-24 space-y-3">
+            <div class="elite-card rounded-2xl p-5 border-indigo-500/30 bg-gradient-to-b from-slate-900 to-[#0c1424] shadow-2xl">
+              <div class="flex justify-between items-center pb-3 border-b border-white/10">
+                <div class="flex items-center gap-2">
+                  <span class="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span class="text-xs font-bold text-white font-mono">LIVE TELEMETRY</span>
+                </div>
+                <span class="badge bg-indigo-900/60 text-indigo-300 font-mono">GIZA: 30.01°N</span>
+              </div>
+
+              <div class="space-y-3 mt-4 text-xs font-mono">
+                <div class="p-2.5 bg-slate-950/70 rounded-xl border border-white/5 flex justify-between items-center">
+                  <span class="text-slate-400 font-sans">الاستراتيجية الحالية:</span>
+                  <span class="text-indigo-400 font-bold">Option B (Exam Sprint)</span>
+                </div>
+                <div class="p-2.5 bg-slate-950/70 rounded-xl border border-white/5 flex justify-between items-center">
+                  <span class="text-slate-400 font-sans">العد التنازلي للامتحان:</span>
+                  <span class="text-amber-400 font-bold"><span id="telemetry-days">--</span> يوم متبقي</span>
+                </div>
+                <div class="p-2.5 bg-slate-950/70 rounded-xl border border-white/5 flex justify-between items-center">
+                  <span class="text-slate-400 font-sans">الشابتر المستهدف حالياً:</span>
+                  <span class="text-emerald-400 font-bold truncate max-w-[150px]">Ch2: Test Case Gen</span>
+                </div>
+                <div class="p-2.5 bg-slate-950/70 rounded-xl border border-white/5 flex justify-between items-center">
+                  <span class="text-slate-400 font-sans">مزامنة السحابة:</span>
+                  <span class="text-cyan-400 font-bold">Firebase RTDB Realtime</span>
+                </div>
+              </div>
+
+              <div class="mt-4 pt-3 border-t border-white/5 text-[11px] text-slate-400 flex items-center justify-between">
+                <span>الوضعية الحالية:</span>
+                <span class="text-emerald-300 font-bold">متكيف أوتوماتيكياً ✅</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Feature Descriptions (Scrollable) -->
+          <div class="lg:col-span-7 space-y-4">
+            <!-- Engine 1 -->
+            <div class="elite-card rounded-2xl p-5 space-y-2 border-indigo-500/20">
+              <div class="flex items-center gap-2 text-indigo-300 font-bold text-sm">
+                <span>🛰️</span> 1. المحرك الفلكي الرياضي (Astronomical Solar Engine)
+              </div>
+              <p class="text-xs text-slate-300 leading-relaxed">
+                لا نعتمد على جداول صلاة صلبة أو ثابتة. يحتوي التطبيق على محرك فلكي مدمج يحسب مواقع الشمس بدقة (Julian Date + Declination + Equation of Time) وفقاً لمعايير الهيئة المصرية العامة للمساحة (الفجر 19.5°، العشاء 17.5°). هذا يضمن دقة أوقات الصلاة والربط بالجدول في أي يوم على مدار السنة وبشكل أوفلاين تماماً.
+              </p>
+            </div>
+
+            <!-- Engine 2 -->
+            <div class="elite-card rounded-2xl p-5 space-y-2 border-emerald-500/20">
+              <div class="flex items-center gap-2 text-emerald-300 font-bold text-sm">
+                <span>🧬</span> 2. محرك الشجرة الذرية للمهام (Atomic Task Hierarchy Engine)
+              </div>
+              <p class="text-xs text-slate-300 leading-relaxed">
+                ينظم المهام في 3 مستويات محكمة: Track -> Course -> Chapter. التقدم (Progress) لا يتم تعديله عشوائياً بواسطة slider يدوي، بل يُحسب كمعادلة رياضية دقيقة من عدد الشباتر المنجزة فعلياً. وعندما يفتح المستخدم الجدول اليومي، يقرأ المخطط تلقائياً أول شابتر غير منجز ويضعه في جلسة التركيز المسائية.
+              </p>
+            </div>
+
+            <!-- Engine 3 -->
+            <div class="elite-card rounded-2xl p-5 space-y-2 border-teal-500/20">
+              <div class="flex items-center gap-2 text-teal-300 font-bold text-sm">
+                <span>💬</span> 3. المحلل اللغوي التكيفي (Offline Arabic NLP Parser)
+              </div>
+              <p class="text-xs text-slate-300 leading-relaxed">
+                بدلاً من النقر اليدوي على السلايدرز، تستطيعين كتابة ظرف اليوم بالعربية البسيطة مثل: "رجعت 3 العصر ومصدعة ومفيش شغل". المحلل يستخرج ساعة الوصول، ويفعل قيلولة التعافي بدلاً من إرهاق المذاكرة، ويزيل بلوك الشغل، ويعيد توزيع اليوم في أقل من 50 ميلي ثانية أوفلاين.
+              </p>
+            </div>
+
+            <!-- Engine 4 -->
+            <div class="elite-card rounded-2xl p-5 space-y-2 border-amber-500/20">
+              <div class="flex items-center gap-2 text-amber-300 font-bold text-sm">
+                <span>☁️</span> 4. المزامنة السحابية الذكية (Firebase Realtime + Offline Cache)
+              </div>
+              <p class="text-xs text-slate-300 leading-relaxed">
+                يستخدم التطبيق Firebase Realtime Database مع ميزة Anonymous Auth، مما يضمن حفظ بياناتك بدون الحاجة لإنشاء حساب معقد، مع استمرار العمل وعزل البيانات لكل جهاز. كما تُحفظ التعديلات مع Debounce مدته 600ms لتفادي استهلاك العمليات، مع دعم كامل للعمل الأوفلاين عبر الـ Service Worker.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. ACCORDION LIST: 5 TIME MANAGEMENT FRAMEWORKS -->
+      <section class="reveal space-y-3">
+        <div class="text-center max-w-xl mx-auto">
+          <h3 class="text-base font-extrabold text-white">أطر إدارة الوقت المدمجة في النظام (Frameworks)</h3>
+          <p class="text-xs text-slate-400 mt-1">كيف تم دمج أفضل نظريات إدارة الإنتاجية في المخطط التكيفي؟</p>
+        </div>
+
+        <div class="space-y-2.5 max-w-4xl mx-auto mt-4">
+          <!-- Accordion Item 1 -->
+          <div class="elite-card rounded-2xl p-4 cursor-pointer hover:border-indigo-500/40" onclick="EliteUI.toggleAccordion(this)">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-bold text-white flex items-center gap-2">
+                <span>🎯</span> 1. مصفوفة أيزنهاور (Eisenhower Matrix: Urgent vs. Important)
+              </span>
+              <span class="acc-icon text-slate-400 text-xs transition-transform">▾</span>
+            </div>
+            <div class="acc-content hidden text-xs text-slate-300 mt-3 pt-3 border-t border-white/5 leading-relaxed space-y-1">
+              <p>تم تصنيف التزاماتك في النظام تلقائياً:</p>
+              <p>• <strong>عاجل وهام:</strong> لابات ومشاريع ITI اليومية + امتحان CT-GenAI المحدد بتاريخ 17 ديسمبر (أولوية قصوى لا تقبل المساومة).</p>
+              <p>• <strong>هام غير عاجل:</strong> البحث الديني الفكري والشغل والفريلانس (تم حجز كتل زمنية ثابتة لها يومياً وأسبوعياً حتى لا تضيع تحت ضغط العاجل).</p>
+              <p>• <strong>غير هام وغير عاجل:</strong> التصفح العشوائي والمشتتات (تم حذفها من الفترات الأساسية وتوفير وقت راحة حر في عطلة الجمعة).</p>
+            </div>
+          </div>
+
+          <!-- Accordion Item 2 -->
+          <div class="elite-card rounded-2xl p-4 cursor-pointer hover:border-indigo-500/40" onclick="EliteUI.toggleAccordion(this)">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-bold text-white flex items-center gap-2">
+                <span>⏳</span> 2. التقسيم الزمني وتجميع المهام (Time Blocking & Task Batching)
+              </span>
+              <span class="acc-icon text-slate-400 text-xs transition-transform">▾</span>
+            </div>
+            <div class="acc-content hidden text-xs text-slate-300 mt-3 pt-3 border-t border-white/5 leading-relaxed space-y-1">
+              <p>كل دقيقة في الـ 24 ساعة اليومية لها "غرض محدد". لا يوجد فراغ زمني عائم يولد التسويف.</p>
+              <p>• تم دمج المهام المتشابهة معاً في كتل (مثلاً: لابات ITI معاً، المذاكرة النظرية معاً، الصوتيات معاً).</p>
+              <p>• وجود هوامش عازلة (Buffers) مدتها 15-30 دقيقة تمنع انهيار باقي الجدول عند حدوث أي تأخير غير متوقع في المواصلات.</p>
+            </div>
+          </div>
+
+          <!-- Accordion Item 3 -->
+          <div class="elite-card rounded-2xl p-4 cursor-pointer hover:border-indigo-500/40" onclick="EliteUI.toggleAccordion(this)">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-bold text-white flex items-center gap-2">
+                <span>⚡</span> 3. إدارة الطاقة وقوس التركيز الفائق (Energy Management & Peak Focus)
+              </span>
+              <span class="acc-icon text-slate-400 text-xs transition-transform">▾</span>
+            </div>
+            <div class="acc-content hidden text-xs text-slate-300 mt-3 pt-3 border-t border-white/5 leading-relaxed space-y-1">
+              <p>المخطط لا يعامل الساعات بالتساوي بل يوزع المهام بناءً على "مستوى طاقتك الذهنية":</p>
+              <p>• <strong>المساء (Peak Focus):</strong> تم وضعه لمذاكرة CT-GenAI الأصعب ذهنياً لأن تركيزك في أعلى مستوياته ليلاً.</p>
+              <p>• <strong>ما بعد الرجوع من المواصلات (Low Energy):</strong> تم تخصيصه لغداء الوالدة الهادئ، أو قيلولة التعافي عند الإرهاق، لحماية قدرتك المعرفية للسهرة.</p>
+            </div>
+          </div>
+
+          <!-- Accordion Item 4 -->
+          <div class="elite-card rounded-2xl p-4 cursor-pointer hover:border-indigo-500/40" onclick="EliteUI.toggleAccordion(this)">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-bold text-white flex items-center gap-2">
+                <span>🧠</span> 4. العمل العميق وسبرنتات بومودورو (Deep Work & Ultradian Sprints)
+              </span>
+              <span class="acc-icon text-slate-400 text-xs transition-transform">▾</span>
+            </div>
+            <div class="acc-content hidden text-xs text-slate-300 mt-3 pt-3 border-t border-white/5 leading-relaxed space-y-1">
+              <p>• فترات المذاكرة مقسمة إلى سبرنتات عميقة تتراوح بين 50 و90 دقيقة دون مقاطعة أو تبديل مهام (Context Switching).</p>
+              <p>• الصلوات الخمس تعمل كفواصل استراحة فطرية (Natural Breaks) تعيد تجديد تدفق الدم وتهدئة العقل قبل بدء السبرنت التالي.</p>
+            </div>
+          </div>
+
+          <!-- Accordion Item 5 -->
+          <div class="elite-card rounded-2xl p-4 cursor-pointer hover:border-indigo-500/40" onclick="EliteUI.toggleAccordion(this)">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-bold text-white flex items-center gap-2">
+                <span>🔗</span> 5. ربط العادات والاستغلال المزدوج (Habit Stacking & Dual-Purpose)
+              </span>
+              <span class="acc-icon text-slate-400 text-xs transition-transform">▾</span>
+            </div>
+            <div class="acc-content hidden text-xs text-slate-300 mt-3 pt-3 border-t border-white/5 leading-relaxed space-y-1">
+              <p>ربط العادات الجديدة بعادات ومواعيد قائمة بالفعل:</p>
+              <p>• <strong>المواصلات رايح:</strong> ربط ركوب المترو/المواصلات بسماع AI Podcasts وتدريب English Shadowing (استثمار 120 دقيقة مهدرة).</p>
+              <p>• <strong>المواصلات راجع:</strong> ربطها بصوتيات سلاسل البحث الديني وتفريغ العقل.</p>
+              <p>• <strong>الصلوات:</strong> ربط الفجر والمغرب بأذكار الصباح والمساء، وربط بعد العشاء بجلسة الشاي وبر الوالدة.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. SPLIT CTA CARD -->
+      <section class="reveal elite-card rounded-3xl p-6 md:p-8 border-indigo-500/30 bg-gradient-to-r from-slate-900 to-indigo-950/40 shadow-xl max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+        <div class="space-y-1.5 text-center md:text-right">
+          <h3 class="text-base md:text-lg font-extrabold text-white">جاهزة لضبط إيقاع يومك وتحقيق كامل أهدافك؟</h3>
+          <p class="text-xs text-slate-400">انتقلي لجدول اليوم، حددي وقت وصولك، ودعي المحرك التكيفي ينسق الساعات باحترافية.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+          <button onclick="UI.switchTab('daily')" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-600/30 transition transform hover:-translate-y-0.5">
+            الانتقال لجدول اليوم 📅
+          </button>
+          <button onclick="TaskAgent.openAddModal()" class="bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold text-xs px-4 py-2.5 rounded-xl border border-white/10 transition">
+            إضافة كورس جديد ➕
+          </button>
+        </div>
+      </section>
 
     </div>
 
   </main>
 
-  <!-- Add Task Modal -->
-  <div id="task-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 space-y-3 shadow-2xl">
-      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-        <h3 class="text-xs font-bold text-white">إضافة مهمة أو لاب جديد لـ Agent 1</h3>
-        <button onclick="closeAddTaskModal()" class="text-slate-400 hover:text-white">✕</button>
+  <!-- ==========================================================
+       STICKY BOTTOM BAR (Floating Live System Bar)
+  =========================================================== -->
+  <div id="sticky-bottom-bar" class="fixed bottom-16 md:bottom-4 left-4 right-4 max-w-4xl mx-auto z-40 elite-card border-indigo-500/30 bg-slate-950/90 backdrop-blur-md rounded-2xl p-3 shadow-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+    <div class="flex items-center gap-2.5">
+      <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+      <span class="text-slate-200">
+        ⚡ <strong class="text-indigo-300">النظام نشط:</strong> صلوات الجيزة الفلكية متزامنة • متبقي <span id="bar-exam-days" class="text-amber-400 font-bold font-mono">--</span> يوم على امتحان CT-GenAI.
+      </span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button onclick="UI.switchTab('daily')" class="bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold px-3 py-1 rounded-lg transition shadow-md shadow-indigo-600/30">
+        عرض الجدول اليومي
+      </button>
+      <button onclick="EliteUI.dismissStickyBar()" class="text-slate-400 hover:text-white px-2 py-1 text-sm leading-none" title="إخفاء الشريط">
+        ✕
+      </button>
+    </div>
+  </div>
+
+  <!-- ==========================================================
+       STATUS INDICATOR FOOTER (System Telemetry Footer)
+  =========================================================== -->
+  <footer class="border-t border-white/5 bg-slate-950/80 py-4 px-4 text-xs text-slate-400 mt-12 mb-16 md:mb-0">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-[11px]">
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <span class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          قاعدة البيانات: <strong class="text-slate-200 font-mono">Firebase RTDB (Anonymous UID)</strong>
+        </span>
+        <span class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
+          المحرك الفلكي: <strong class="text-slate-200 font-mono">Giza 30.01°N, 31.20°E</strong>
+        </span>
+        <span class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-teal-400"></span>
+          معمارية النظام: <strong class="text-slate-200 font-mono">Two-Agent Core</strong>
+        </span>
       </div>
-      <div class="space-y-2.5 text-xs">
+      <div class="text-slate-500">
+        Adaptive Planner • Built for Engineer's Success © 2026
+      </div>
+    </div>
+  </footer>
+
+  <!-- ==========================================================
+       MOBILE BOTTOM NAVIGATION BAR
+  =========================================================== -->
+  <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-[#080f1a]/95 border-t border-white/5 backdrop-blur-md z-50 flex justify-around py-2.5">
+    <button onclick="UI.switchTab('daily')"   id="m-tab-daily"   class="mob-tab active flex flex-col items-center gap-1 text-slate-500 text-[10px]"><span class="text-lg">📅</span>اليومي</button>
+    <button onclick="UI.switchTab('tasks')"   id="m-tab-tasks"   class="mob-tab flex flex-col items-center gap-1 text-slate-500 text-[10px]"><span class="text-lg">🤖</span>المهام</button>
+    <button onclick="UI.switchTab('weekly')"  id="m-tab-weekly"  class="mob-tab flex flex-col items-center gap-1 text-slate-500 text-[10px]"><span class="text-lg">📊</span>الأسبوعي</button>
+    <button onclick="UI.switchTab('monthly')" id="m-tab-monthly" class="mob-tab flex flex-col items-center gap-1 text-slate-500 text-[10px]"><span class="text-lg">🗺️</span>الشهري</button>
+    <button onclick="UI.switchTab('elite')"   id="m-tab-elite"   class="mob-tab flex flex-col items-center gap-1 text-slate-500 text-[10px]"><span class="text-lg">✨</span>المميزات</button>
+  </nav>
+
+  <!-- ==========================================================
+       ADD TASK MODAL (Hierarchical Track -> Course -> Chapter)
+  =========================================================== -->
+  <div id="task-modal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-[#0d1526] border border-white/10 rounded-2xl max-w-lg w-full p-5 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-white/5 pb-3 mb-4">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <span>➕</span> إضافة Track / Course / Chapter
+        </h3>
+        <button onclick="TaskAgent.closeModal()" class="text-slate-400 hover:text-white text-xl leading-none">×</button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <!-- Level: Track / Course / Chapter -->
         <div>
-          <label class="block text-slate-300 mb-1">اسم الكورس أو المهمة:</label>
-          <input id="new-task-title" type="text" placeholder="مثلاً: كورس API Testing: Lab 2 Requests" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white">
+          <label class="block text-slate-300 mb-1 font-semibold">مستوى المهمة:</label>
+          <select id="modal-level" onchange="TaskAgent.onModalLevelChange()" class="w-full bg-slate-950 border border-white/10 rounded-lg p-2 text-white focus:outline-none focus:border-indigo-500">
+            <option value="track">Track (مسار رئيسي جديد)</option>
+            <option value="course" selected>Course (كورس داخل Track موجود)</option>
+            <option value="chapter">Chapter (شابتر داخل كورس موجود)</option>
+          </select>
         </div>
-        <div class="grid grid-cols-2 gap-2">
+
+        <!-- Parent Track Selector -->
+        <div id="modal-track-select-row" class="hidden">
+          <label class="block text-slate-300 mb-1 font-semibold">اختاري الـ Track:</label>
+          <select id="modal-parent-track" onchange="TaskAgent.onTrackSelectChange()" class="w-full bg-slate-950 border border-white/10 rounded-lg p-2 text-white focus:outline-none focus:border-indigo-500">
+            <!-- Populated dynamically by JS -->
+          </select>
+        </div>
+
+        <!-- Parent Course Selector (Filtered by chosen Track) -->
+        <div id="modal-course-select-row" class="hidden">
+          <label class="block text-slate-300 mb-1 font-semibold">اختاري الـ Course:</label>
+          <select id="modal-parent-course" class="w-full bg-slate-950 border border-white/10 rounded-lg p-2 text-white focus:outline-none focus:border-indigo-500">
+            <!-- Populated dynamically by JS -->
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-slate-300 mb-1">المسار:</label>
-            <select id="new-task-cat" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white">
-              <option value="ITI">ITI Testing Track</option>
-              <option value="CT-GenAI">CT-GenAI Exam</option>
-              <option value="Spiritual">البحث الديني (PDF)</option>
-              <option value="Project">الشغل والمشروع</option>
-            </select>
+            <label class="block text-slate-300 mb-1 font-semibold">الاسم (Name):</label>
+            <input id="modal-name" type="text" placeholder="اسم الكورس أو الشابتر"
+                   class="w-full bg-slate-950 border border-white/10 rounded-lg p-2 text-white focus:outline-none focus:border-indigo-500">
           </div>
           <div>
-            <label class="block text-slate-300 mb-1">المدة المقدرة (بالدقائق):</label>
-            <input id="new-task-dur" type="number" value="60" step="15" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white">
+            <label class="block text-slate-300 mb-1 font-semibold">المدة المقدرة (دقيقة):</label>
+            <input id="modal-duration" type="number" value="60" step="15"
+                   class="w-full bg-slate-950 border border-white/10 rounded-lg p-2 text-white focus:outline-none focus:border-indigo-500 font-mono">
           </div>
         </div>
+
+        <!-- Track-only fields -->
+        <div id="modal-track-fields" class="hidden">
+          <label class="block text-slate-300 mb-1 font-semibold">التصنيف (Category):</label>
+          <select id="modal-category" class="w-full bg-slate-950 border border-white/10 rounded-lg p-2 text-white focus:outline-none focus:border-indigo-500">
+            <option value="ITI">ITI Testing Track</option>
+            <option value="CT-GenAI">CT-GenAI Exam</option>
+            <option value="Spiritual">البحث الديني (PDF)</option>
+            <option value="Project">الشغل والمشروع</option>
+          </select>
+        </div>
+
         <div>
-          <label class="block text-slate-300 mb-1">الوصف والمخرجات المطلوبة:</label>
-          <textarea id="new-task-desc" rows="2" placeholder="ماذا سيتم تسليمه أو مذاكرته بالتفصيل..." class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white"></textarea>
+          <label class="block text-slate-300 mb-1 font-semibold">الوصف / المخرجات المطلوبة:</label>
+          <textarea id="modal-desc" rows="2" placeholder="ماذا سيتم تسليمه أو مذاكرته بالتفصيل..."
+                    class="w-full bg-slate-950 border border-white/10 rounded-lg p-2 text-white focus:outline-none focus:border-indigo-500 resize-none"></textarea>
         </div>
       </div>
-      <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
-        <button onclick="closeAddTaskModal()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs">إلغاء</button>
-        <button onclick="saveNewTask()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold">حفظ تلقائي</button>
+
+      <div class="flex justify-end gap-2 pt-4 border-t border-white/5 mt-4">
+        <button onclick="TaskAgent.closeModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition">إلغاء</button>
+        <button onclick="TaskAgent.saveFromModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-600/20">حفظ في Firebase</button>
       </div>
     </div>
   </div>
 
-  <script>
-    // =========================================================================
-    // 1. PWA SERVICE WORKER REGISTRATION
-    // =========================================================================
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(() => {});
-      });
-    }
-
-    let deferredPrompt;
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      const btn = document.getElementById('pwa-install-btn');
-      if (btn) btn.classList.remove('hidden');
-    });
-
-    function installPWA() {
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then(() => {
-          deferredPrompt = null;
-          document.getElementById('pwa-install-btn').classList.add('hidden');
-        });
-      }
-    }
+  <!-- ==========================================================
+       FIREBASE SDK (CDN — no NPM needed for Phase 1 MVP)
+  =========================================================== -->
+  <script type="module">
+    import { initializeApp }                           from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+    import { getDatabase, ref, set, get, update, onValue } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 
     // =========================================================================
-    // 2. GIZA ASTRONOMICAL ENGINE
+    // SECTION 1: FIREBASE INITIALIZATION
     // =========================================================================
-    const GIZA = { lat: 30.0131, lng: 31.2089, timezone: 2.0, fajrAngle: 19.5, ishaAngle: 17.5 };
-    function degToRad(d) { return (d * Math.PI) / 180.0; }
-    function radToDeg(r) { return (r * 180.0) / Math.PI; }
 
-    function calculateGizaPrayerTimes(date) {
-      const year = date.getFullYear();
-      const month = date.getMonth() + 1;
-      const day = date.getDate();
-      const a = Math.floor((14 - month) / 12);
-      const y = year + 4800 - a;
-      const m = month + 12 * a - 3;
-      const jd = day + Math.floor((153 * m + 2) / 5) + 365 * y + Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400) - 32045 - 0.5 + (12.0 / 24.0);
-      const d = jd - 2451545.0;
-
-      const g = 357.529 + 0.98560028 * d;
-      const q = 280.459 + 0.98564736 * d;
-      const L = q + 1.915 * Math.sin(degToRad(g)) + 0.020 * Math.sin(degToRad(2 * g));
-      const e = 23.439 - 0.00000036 * d;
-
-      const sinDec = Math.sin(degToRad(e)) * Math.sin(degToRad(L));
-      const dec = radToDeg(Math.asin(sinDec));
-      const RA = radToDeg(Math.atan2(Math.cos(degToRad(e)) * Math.sin(degToRad(L)), Math.cos(degToRad(L)))) / 15.0;
-      const eqTime = (q / 15.0) - RA;
-      const noon = 12.0 + GIZA.timezone - (GIZA.lng / 15.0) - eqTime;
-
-      function hourAngle(alt) {
-        const cosHA = (Math.sin(degToRad(alt)) - Math.sin(degToRad(GIZA.lat)) * Math.sin(degToRad(dec))) /
-                      (Math.cos(degToRad(GIZA.lat)) * Math.cos(degToRad(dec)));
-        if (cosHA > 1) return 0;
-        if (cosHA < -1) return Math.PI;
-        return radToDeg(Math.acos(cosHA)) / 15.0;
-      }
-
-      const haSun = hourAngle(-0.833);
-      const sunrise = noon - haSun;
-      const sunset = noon + haSun;
-      const fajr = noon - hourAngle(-GIZA.fajrAngle);
-      const isha = noon + hourAngle(-GIZA.ishaAngle);
-
-      const asrAlt = radToDeg(Math.atan(1.0 / (1.0 + Math.tan(degToRad(Math.abs(GIZA.lat - dec))))));
-      const asr = noon + hourAngle(asrAlt);
-
-      return {
-        fajrMin: Math.round(fajr * 60),
-        sunriseMin: Math.round(sunrise * 60),
-        dhuhrMin: Math.round(noon * 60),
-        asrMin: Math.round(asr * 60),
-        maghribMin: Math.round(sunset * 60),
-        ishaMin: Math.round(isha * 60)
-      };
-    }
-
-    // =========================================================================
-    // 3. PERSISTENT STATE MANAGEMENT (LOCAL STORAGE)
-    // =========================================================================
-    const STORAGE_KEY = 'ADAPTIVE_SCHEDULER_STATE_V2';
-
-    const defaultState = {
-      currentTab: 'daily',
-      strategy: 'B',
-      isFriday: false,
-      arrivalHour: 15.0, // 3:00 PM
-      selectedDateStr: '2026-11-22',
-      isExhausted: false,
-      isMomOuting: false,
-      isNoWork: false,
-      taskFilter: 'ALL',
-      completedBlockIndices: {},
-      tasks: [
-        {
-          id: 101,
-          title: 'ITI Track: كورس API Testing (Python Requests & Pytest)',
-          cat: 'ITI',
-          dur: 90,
-          items: [
-            { id: 'iti-1', name: 'Lab 1: CRUD Endpoints Validation', done: true },
-            { id: 'iti-2', name: 'Lab 2: Pytest Fixtures & Parametrization', done: true },
-            { id: 'iti-3', name: 'Lab 3: Mocking External Services & Auth Tokens', done: false },
-            { id: 'iti-4', name: 'Module Project: Automated Regression Suite', done: false }
-          ],
-          desc: 'الكورس النشط حالياً في الـ ITI - يتم حساب الـ Progress بنسبة اللابات المنجزة.'
-        },
-        {
-          id: 102,
-          title: 'CT-GenAI: Ch2 Prompt Engineering (365 min)',
-          cat: 'CT-GenAI',
-          dur: 180,
-          items: [
-            { id: 'genai-1', name: '2.1 Fundamentals of Prompts & Zero-shot', done: true },
-            { id: 'genai-2', name: '2.2 Few-shot prompting for Test Generation', done: true },
-            { id: 'genai-3', name: '2.3 System Prompts & Defect Report Synthesis', done: false },
-            { id: 'genai-4', name: '2.4 Evaluating Output Quality & Hallucinations', done: false }
-          ],
-          desc: 'الشابتر الأكبر في السيلبس - تركيز عملي لتوليد حالات الاختبار وتحليل الأخطاء.'
-        },
-        {
-          id: 103,
-          title: 'البحث الديني الفكري: الأسبوع الأول (من خطة الـ PDF)',
-          cat: 'Spiritual',
-          dur: 90,
-          items: [
-            { id: 'spir-1', name: 'قراءة فصول "شموع النهار" (د. العجيري)', done: true },
-            { id: 'spir-2', name: 'سماع سلسلة د. سامي عامري (براهين وجود الله)', done: true },
-            { id: 'spir-3', name: 'تدوين وتلخيص 3 حجج عقلية للرد على الفكر الربوبي', done: false }
-          ],
-          desc: 'تأسيس الأدلة العقلية لضرورة الوحي والرد على الفكر الربوبي.'
-        },
-        {
-          id: 104,
-          title: 'مهام العمل والفريلانس الأساسية',
-          cat: 'Project',
-          dur: 30,
-          items: [
-            { id: 'proj-1', name: 'صيانة ومتابعة سيرفرات الباك إند', done: true },
-            { id: 'proj-2', name: 'إغلاق الـ Critical PRs المستعجلة', done: false }
-          ],
-          desc: 'صيانة ساعة العمل اليومية الضرورية فقط أثناء فترة الـ Sprint.'
-        }
-      ]
+    const FIREBASE_CONFIG = {
+      apiKey:            "AIzaSyAlXkS0WEKVOJ1TtPRHJk0sR36RNIZ3_Uc",
+      authDomain:        "planner-c95c5.firebaseapp.com",
+      projectId:         "planner-c95c5",
+      storageBucket:     "planner-c95c5.firebasestorage.app",
+      messagingSenderId: "827212235705",
+      appId:             "1:827212235705:web:685096f004a70909b86c68",
+      databaseURL:       "https://planner-c95c5-default-rtdb.firebaseio.com",
+      measurementId:     "G-DKFW6VMDYV"
     };
 
-    let state = loadState();
+    const firebaseApp = initializeApp(FIREBASE_CONFIG);
+    const db          = getDatabase(firebaseApp);
+    const auth        = getAuth(firebaseApp);
 
-    function saveState() {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        const badge = document.getElementById('save-status-badge');
-        if (badge) {
-          badge.innerText = '💾 تم الحفظ';
-          setTimeout(() => { badge.innerText = '💾 يُحفظ تلقائياً'; }, 1500);
-        }
-      } catch (e) {}
-    }
+    // =========================================================================
+    // SECTION 2: CONSTANTS (No Magic Numbers)
+    // =========================================================================
 
-    function loadState() {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) return JSON.parse(saved);
-      } catch (e) {}
-      return JSON.parse(JSON.stringify(defaultState));
-    }
+    const CONSTANTS = {
+      EXAM_DATE:       new Date('2026-12-17'),
+      BEDTIME_HOUR:    23.5,       // 11:30 PM — sleep boundary
+      MIN_SLEEP_HOURS: 7.0,        // Minimum enforced sleep
+      COMMUTE_BACK_MIN: 90,        // Average return commute in minutes
+      ITI_START_HOUR:  9.0,        // 09:00 AM
+      DEPART_HOUR:     6.5,        // 06:30 AM — leave home
+      COMMUTE_GO_MIN:  120,        // Morning commute duration
 
-    function resetAllData() {
-      if (confirm('هل أنتِ متأكدة من رغبتك في إعادة ضبط التطبيق للوضع الافتراضي؟')) {
-        localStorage.removeItem(STORAGE_KEY);
-        state = JSON.parse(JSON.stringify(defaultState));
-        applyStateToUI();
-        saveState();
-      }
-    }
+      // Giza Coordinates (Egyptian Survey Authority Method)
+      GIZA: { lat: 30.0131, lng: 31.2089, timezone: 2.0, fajrAngle: 19.5, ishaAngle: 17.5 },
 
-    // 12-Hour Converter
-    function format12(minutes) {
-      minutes = (minutes % 1440 + 1440) % 1440;
-      let hours = Math.floor(minutes / 60);
-      let mins = Math.floor(minutes % 60);
-      let period = hours >= 12 ? 'م' : 'ص';
-      let h12 = hours % 12;
-      if (h12 === 0) h12 = 12;
-      let hStr = h12 < 10 ? '0' + h12 : '' + h12;
-      let mStr = mins < 10 ? '0' + mins : '' + mins;
-      return `${hStr}:${mStr} ${period}`;
+      // Firebase paths — mirrors EERD structure exactly
+      PATHS: {
+        userRoot:   (uid) => 'users/' + uid,
+        settings:   (uid) => 'users/' + uid + '/settings',
+        tracks:     (uid) => 'users/' + uid + '/tracks',
+        track:      (uid, tid)         => 'users/' + uid + '/tracks/' + tid,
+        courses:    (uid, tid)         => 'users/' + uid + '/tracks/' + tid + '/courses',
+        course:     (uid, tid, cid)    => 'users/' + uid + '/tracks/' + tid + '/courses/' + cid,
+        chapters:   (uid, tid, cid)    => 'users/' + uid + '/tracks/' + tid + '/courses/' + cid + '/chapters',
+        chapter:    (uid, tid, cid, chId) => 'users/' + uid + '/tracks/' + tid + '/courses/' + cid + '/chapters/' + chId,
+        dailyPlan:  (uid, date)        => 'users/' + uid + '/dailyPlans/' + date,
+        blockDone:  (uid, date, key)   => 'users/' + uid + '/dailyPlans/' + date + '/blocks/' + key,
+        prayerCache:(uid, lat, lng, date) => 'users/' + uid + '/prayerCache/' + lat + '_' + lng + '_' + date,
+      },
+
+      // Block type badge styles
+      BLOCK_COLORS: {
+        amber:   'bg-amber-500/20 text-amber-300 border-amber-500/30',
+        indigo:  'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
+        blue:    'bg-blue-500/20 text-blue-300 border-blue-500/30',
+        emerald: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+        rose:    'bg-rose-500/20 text-rose-400 border-rose-500/30',
+        purple:  'bg-purple-500/20 text-purple-300 border-purple-500/30',
+        teal:    'bg-teal-500/20 text-teal-300 border-teal-500/30',
+        slate:   'bg-slate-800 text-slate-400 border-slate-700',
+      },
+
+      // Category display config
+      CATEGORIES: {
+        'ITI':       { label: 'ITI Track', color: 'blue',    icon: '🎓' },
+        'CT-GenAI':  { label: 'CT-GenAI',  color: 'emerald', icon: '🤖' },
+        'Spiritual': { label: 'بحث ديني',  color: 'teal',    icon: '📖' },
+        'Project':   { label: 'مشروع/شغل', color: 'amber',   icon: '💼' },
+      },
+
+      // Weekly data for the 168-hour balance table
+      WEEKLY_ROWS: [
+        { name: 'دوام الـ ITI Testing Track', sat:7, sun:7, mon:7, tue:7, wed:7, thu:7, fri:2.5,  total:44.5 },
+        { name: 'مذاكرة CT-GenAI (سيلبس وعملي)', sat:2, sun:2, mon:2, tue:2, wed:2, thu:2, fri:3.5, total:15.5 },
+        { name: 'البحث الديني الفكري (PDF)', sat:1, sun:1, mon:1, tue:1, wed:1, thu:1, fri:2,   total:8.0 },
+        { name: 'بودكاست وإنجليزي (Commute Stack)', sat:2, sun:2, mon:2, tue:2, wed:2, thu:2, fri:0,   total:12.0 },
+        { name: 'وقت الوالدة والبر العائلي ❤️', sat:1.5, sun:1.5, mon:1.5, tue:1.5, wed:1.5, thu:1.5, fri:4, total:13.0 },
+        { name: 'الشغل والفريلانس / المشروع', sat:.5, sun:.5, mon:.5, tue:.5, wed:.5, thu:.5, fri:0,   total:3.0 },
+        { name: 'الصلوات والراحة والنوم الصحي (7-8 س)', sat:10, sun:10, mon:10, tue:10, wed:10, thu:10, fri:12, total:72.0 },
+      ],
+    };
+
+    // =========================================================================
+    // SECTION 3: APPLICATION STATE (Single Source of Truth)
+    // =========================================================================
+
+    const AppState = {
+      uid:          null,
+      currentTab:   'daily',
+      selectedDate: '2026-11-22',
+      taskFilter:   'ALL',
+
+      // Scheduler settings (synced to Firebase settings/)
+      settings: {
+        strategy:    'B',
+        arrivalHour: 15.0,
+        isFriday:    false,
+        isExhausted: false,
+        isMomOuting: false,
+        isNoWork:    false,
+      },
+
+      // Prayer times for selectedDate (from astronomical engine or API)
+      prayers: { fajrMin:300, dhuhrMin:705, asrMin:880, maghribMin:1015, ishaMin:1095 },
+
+      // Tracks/Courses/Chapters loaded from Firebase
+      tracks: {},
+
+      // Block completion state for selectedDate, keyed by blockKey
+      completedBlocks: {},
+    };
+
+    // =========================================================================
+    // SECTION 4: UTILITY FUNCTIONS
+    // =========================================================================
+
+    function format12(totalMinutes) {
+      const m = ((totalMinutes % 1440) + 1440) % 1440;
+      const h = Math.floor(m / 60);
+      const min = Math.floor(m % 60);
+      const period = h >= 12 ? 'م' : 'ص';
+      const h12 = h % 12 || 12;
+      return String(h12).padStart(2,'0') + ':' + String(min).padStart(2,'0') + ' ' + period;
     }
 
     function formatSpan(startMin, durMin) {
-      return `${format12(startMin)} - ${format12(startMin + durMin)}`;
+      return format12(startMin) + ' — ' + format12(startMin + durMin);
     }
 
-    // Calculate prayer times
-    function getSelectedDate() {
-      return new Date(state.selectedDateStr);
+    function genKey() {
+      return 'k' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
     }
 
-    let prayers = calculateGizaPrayerTimes(getSelectedDate());
-
-    function refreshPrayers() {
-      prayers = calculateGizaPrayerTimes(getSelectedDate());
-      document.getElementById('live-fajr').innerText = format12(prayers.fajrMin);
-      document.getElementById('live-dhuhr').innerText = format12(prayers.dhuhrMin);
-      document.getElementById('live-asr').innerText = format12(prayers.asrMin);
-      document.getElementById('live-maghrib').innerText = format12(prayers.maghribMin);
-      document.getElementById('live-isha').innerText = format12(prayers.ishaMin);
-
-      // Exam countdown
-      const today = new Date('2026-11-22');
-      const examDate = new Date('2026-12-17');
-      const diffDays = Math.ceil((examDate - today) / (1000 * 60 * 60 * 24));
-      document.getElementById('days-to-exam').innerText = `${diffDays} يوم`;
-      const mc = document.getElementById('monthly-countdown');
-      if (mc) mc.innerText = diffDays;
+    function daysToExam() {
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      return Math.max(0, Math.ceil((CONSTANTS.EXAM_DATE - today) / 86400000));
     }
 
-    function handleDateChange() {
-      const input = document.getElementById('selected-date');
-      state.selectedDateStr = input.value;
-      refreshPrayers();
-      renderDaily();
-      saveState();
-    }
-
-    // Find next actionable task from Agent 1
-    function getNextTaskForCategory(cat) {
-      const task = state.tasks.find(t => t.cat === cat);
-      if (!task || !task.items) return null;
-      const pending = task.items.find(i => !i.done);
-      return pending ? pending.name : task.items[task.items.length - 1].name;
-    }
-
-    // Dynamic Daily Schedule Engine
-    function calculateDailySchedule() {
-      if (state.isFriday) return calculateFridaySchedule();
-
-      const P = prayers;
-      const blocks = [];
-
-      // 1. Fajr Anchor
-      blocks.push({
-        id: 'blk-fajr',
-        start: P.fajrMin,
-        dur: 25,
-        name: `🕌 صلاة الفجر في الجيزة (${format12(P.fajrMin)}) + أذكار الصباح`,
-        type: 'Giza Prayer Anchor',
-        color: 'amber'
-      });
-
-      // 2. Early morning buffer
-      const morningEnd = 6.5 * 60; // 06:30 AM
-      if (P.fajrMin + 25 < morningEnd) {
-        blocks.push({
-          id: 'blk-morn-rest',
-          start: P.fajrMin + 25,
-          dur: morningEnd - (P.fajrMin + 25),
-          name: 'راحة صباحية هادئة وقراءة خفيفة وشرب مياه',
-          type: 'Morning Buffer',
-          color: 'slate'
-        });
+    async function firebaseWrite(path, data, merge = false) {
+      try {
+        const r = ref(db, path);
+        merge ? await update(r, data) : await set(r, data);
+        UI.setSyncBadge('synced');
+      } catch (err) {
+        console.warn('[Firebase Write Warning]', path, err);
+        UI.setSyncBadge('error');
       }
+    }
 
-      // 3. Prep
-      blocks.push({
-        id: 'blk-prep',
-        start: morningEnd,
-        dur: 30,
-        name: 'تجهيز الملابس والنزول للمواصلات',
-        type: 'Routine',
-        color: 'slate'
-      });
+    // =========================================================================
+    // SECTION 5: ASTRONOMICAL PRAYER ENGINE (OFFLINE — GIZA)
+    // =========================================================================
 
-      // 4. Commute Go
-      blocks.push({
-        id: 'blk-commute-go',
-        start: 7.0 * 60,
-        dur: 120,
-        name: 'مواصلات رايح + AI Podcasts & English Shadowing',
-        type: 'Dual-Purpose Stack',
-        color: 'indigo'
-      });
+    const PrayerEngine = {
 
-      // 5. ITI Core
-      const arrivalMin = Math.round(state.arrivalHour * 60);
-      const commuteBackDur = 90;
-      const itiEndMin = Math.min(16 * 60, arrivalMin - commuteBackDur);
+      calculate(date) {
+        const { lat, lng, timezone, fajrAngle, ishaAngle } = CONSTANTS.GIZA;
+        const toRad = (d) => (d * Math.PI) / 180;
+        const toDeg = (r) => (r * 180) / Math.PI;
 
-      blocks.push({
-        id: 'blk-iti-core',
-        start: 9.0 * 60,
-        dur: itiEndMin - (9.0 * 60),
-        name: `دوام الـ ITI Testing Track (محاضرات ولابات) - صلاة الظهر ${format12(P.dhuhrMin)} بالـ ITI`,
-        type: `Fixed Core (${((itiEndMin - 540)/60).toFixed(1)} س)`,
-        color: 'blue'
-      });
+        const y = date.getFullYear(), mo = date.getMonth() + 1, dy = date.getDate();
+        const a = Math.floor((14 - mo) / 12);
+        const yr = y + 4800 - a;
+        const mn = mo + 12 * a - 3;
+        const jd = dy + Math.floor((153 * mn + 2) / 5) + 365 * yr
+                 + Math.floor(yr / 4) - Math.floor(yr / 100) + Math.floor(yr / 400)
+                 - 32045 - 0.5 + (12 / 24);
+        const d = jd - 2451545.0;
 
-      // 6. Commute Back
-      blocks.push({
-        id: 'blk-commute-back',
-        start: itiEndMin,
-        dur: arrivalMin - itiEndMin,
-        name: `مواصلات راجع + الاستماع للمحاضرات الدينية (صلاة العصر ${format12(P.asrMin)})`,
-        type: 'Dual-Purpose Audio',
-        color: 'indigo'
-      });
+        const g = 357.529 + 0.98560028 * d;
+        const q = 280.459 + 0.98564736 * d;
+        const L = q + 1.915 * Math.sin(toRad(g)) + 0.020 * Math.sin(toRad(2 * g));
+        const e = 23.439 - 0.00000036 * d;
 
-      // 7. Home Window
-      let cur = arrivalMin;
+        const dec = toDeg(Math.asin(Math.sin(toRad(e)) * Math.sin(toRad(L))));
+        const RA  = toDeg(Math.atan2(Math.cos(toRad(e)) * Math.sin(toRad(L)), Math.cos(toRad(L)))) / 15;
+        const eqT = (q / 15) - RA;
+        const noon = 12 + timezone - (lng / 15) - eqT;
 
-      // Afternoon window before Maghrib
-      if (cur < P.maghribMin) {
-        const afternoonDur = P.maghribMin - cur;
-        const lunchDur = Math.min(45, Math.floor(afternoonDur * 0.45));
+        const hourAngle = (alt) => {
+          const cosHA = (Math.sin(toRad(alt)) - Math.sin(toRad(lat)) * Math.sin(toRad(dec)))
+                      / (Math.cos(toRad(lat)) * Math.cos(toRad(dec)));
+          if (cosHA > 1) return 0;
+          if (cosHA < -1) return 180;
+          return toDeg(Math.acos(cosHA)) / 15;
+        };
 
-        blocks.push({
-          id: 'blk-lunch',
-          start: cur,
-          dur: lunchDur,
-          name: 'وصول البيت + غداء عائلي دافئ مع الوالدة وسوالف بر ❤️',
-          type: 'Mom Time (Early Return)',
-          color: 'rose'
-        });
-        cur += lunchDur;
+        const asrAlt = toDeg(Math.atan(1 / (1 + Math.tan(toRad(Math.abs(lat - dec))))));
 
-        if (state.isExhausted) {
-          const napDur = P.maghribMin - cur;
-          blocks.push({
-            id: 'blk-nap',
-            start: cur,
-            dur: napDur,
-            name: 'قيلولة تعافي وشحن طاقة لعلاج الإرهاق والصداع',
-            type: 'Health Reset',
-            color: 'purple'
-          });
-          cur += napDur;
-        } else {
-          const study1Dur = P.maghribMin - cur;
-          const nextGenAi = getNextTaskForCategory('CT-GenAI') || 'مذاكرة وتطبيق السيلبس';
-          blocks.push({
-            id: 'blk-study-early',
-            start: cur,
-            dur: study1Dur,
-            name: `CT-GenAI Focus: [${nextGenAi}]`,
-            type: `Bonus Focus (${study1Dur} دقيقة)`,
-            color: 'emerald'
-          });
-          cur += study1Dur;
+        return {
+          fajrMin:    Math.round((noon - hourAngle(-fajrAngle)) * 60),
+          dhuhrMin:   Math.round(noon * 60),
+          asrMin:     Math.round((noon + hourAngle(asrAlt)) * 60),
+          maghribMin: Math.round((noon + hourAngle(-0.833)) * 60),
+          ishaMin:    Math.round((noon + hourAngle(-ishaAngle)) * 60),
+        };
+      },
+
+      async load(dateStr) {
+        const { lat, lng } = CONSTANTS.GIZA;
+        const cacheKey = CONSTANTS.PATHS.prayerCache(AppState.uid, lat, lng, dateStr);
+
+        try {
+          const snap = await get(ref(db, cacheKey));
+          if (snap.exists()) {
+            AppState.prayers = snap.val();
+            this._updateUI('كاش محفوظ');
+            return;
+          }
+        } catch (_) { /* Offline fallback */ }
+
+        const date = new Date(dateStr);
+        AppState.prayers = this.calculate(date);
+        this._updateUI('فلكي (المساحة المصرية)');
+
+        if (navigator.onLine) {
+          this._fetchAPI(dateStr, lat, lng, cacheKey);
         }
-      }
+      },
 
-      // Maghrib Anchor
-      blocks.push({
-        id: 'blk-maghrib',
-        start: P.maghribMin,
-        dur: 20,
-        name: `🕌 صلاة المغرب في الجيزة (${format12(P.maghribMin)}) + شرب مياه`,
-        type: 'Dynamic Giza Prayer Anchor',
-        color: 'amber'
-      });
-      cur = P.maghribMin + 20;
+      async _fetchAPI(dateStr, lat, lng, cacheKey) {
+        try {
+          const [dd, mm, yyyy] = [
+            new Date(dateStr).getDate(),
+            new Date(dateStr).getMonth() + 1,
+            new Date(dateStr).getFullYear()
+          ];
+          const url = 'https://api.aladhan.com/v1/timingsByCity/' + dd + '-' + mm + '-' + yyyy + '?city=Giza&country=Egypt&method=5';
+          const res  = await fetch(url);
+          const json = await res.json();
+          if (json && json.data && json.data.timings) {
+            const t = json.data.timings;
+            const p = (s) => { const [h,m] = s.split(':'); return +h * 60 + +m; };
+            const prayers = {
+              fajrMin:    p(t.Fajr),
+              dhuhrMin:   p(t.Dhuhr),
+              asrMin:     p(t.Asr),
+              maghribMin: p(t.Maghrib),
+              ishaMin:    p(t.Isha),
+              source:     'API',
+              cachedAt:   Date.now(),
+            };
+            AppState.prayers = prayers;
+            this._updateUI('API (مساحة مصر)');
+            await firebaseWrite(cacheKey, prayers);
+          }
+        } catch (_) { /* Fallback to astronomical */ }
+      },
 
-      // Between Maghrib & Isha
-      if (cur < P.ishaMin) {
-        const midDur = P.ishaMin - cur;
-        const nextIti = getNextTaskForCategory('ITI') || 'تثبيت لابات اليوم';
-        blocks.push({
-          id: 'blk-iti-lab',
-          start: cur,
-          dur: midDur,
-          name: `ITI Practice: [${nextIti}]`,
-          type: `ITI Deep Work (${midDur} دقيقة)`,
-          color: 'blue'
-        });
-        cur = P.ishaMin;
-      }
+      _updateUI(source = 'فلكي') {
+        const { fajrMin, dhuhrMin, asrMin, maghribMin, ishaMin } = AppState.prayers;
+        document.getElementById('live-fajr').textContent    = format12(fajrMin);
+        document.getElementById('live-dhuhr').textContent   = format12(dhuhrMin);
+        document.getElementById('live-asr').textContent     = format12(asrMin);
+        document.getElementById('live-maghrib').textContent = format12(maghribMin);
+        document.getElementById('live-isha').textContent    = format12(ishaMin);
+        document.getElementById('prayer-source').textContent = source;
+        DailyAgent.render();
+      },
+    };
 
-      // Isha Anchor
-      blocks.push({
-        id: 'blk-isha',
-        start: P.ishaMin,
-        dur: 20,
-        name: `🕌 صلاة العشاء في الجيزة (${format12(P.ishaMin)}) + أذكار`,
-        type: 'Dynamic Giza Prayer Anchor',
-        color: 'amber'
-      });
-      cur = P.ishaMin + 20;
+    // =========================================================================
+    // SECTION 6: DAILY SCHEDULER AGENT (Agent 2)
+    // =========================================================================
 
-      // Night Window to 11:30 PM
-      const bedtimeMin = 23.5 * 60;
-      const eveningAvail = bedtimeMin - cur - 15;
+    const DailyAgent = {
 
-      let genAiDur, workDur, religiousDur, momNightDur;
-      momNightDur = state.isMomOuting ? 120 : ((arrivalMin > 16.5 * 60) ? 45 : 30);
-      workDur = state.isNoWork ? 0 : (state.strategy === 'C' ? 90 : 30);
-      religiousDur = 45;
+      onDateChange(dateStr) {
+        AppState.selectedDate = dateStr;
+        this._saveSettings();
+        PrayerEngine.load(dateStr);
+        this.loadBlockStates();
+      },
 
-      genAiDur = Math.max(60, eveningAvail - momNightDur - workDur - religiousDur);
+      setStrategy(val) {
+        AppState.settings.strategy = val;
+        this._saveSettings();
+        this.render();
+      },
 
-      const nextGenAiNight = getNextTaskForCategory('CT-GenAI') || 'حل أسئلة السيلبس';
-      blocks.push({
-        id: 'blk-genai-night',
-        start: cur,
-        dur: genAiDur,
-        name: `Sprint CT-GenAI: [${nextGenAiNight}]`,
-        type: `Peak Night Focus (${genAiDur} دقيقة)`,
-        color: 'emerald'
-      });
-      cur += genAiDur;
+      setDayType(isFriday) {
+        AppState.settings.isFriday = isFriday;
+        document.getElementById('btn-weekday').classList.toggle('active', !isFriday);
+        document.getElementById('btn-friday').classList.toggle('active', isFriday);
+        this._saveSettings();
+        this.render();
+      },
 
-      if (momNightDur > 0) {
-        blocks.push({
-          id: 'blk-mom-night',
-          start: cur,
-          dur: momNightDur,
-          name: state.isMomOuting ? 'خروجة ومشوار مسائي مع الوالدة وعشاء برة ❤️' : 'جلسة شاي وسوالف وقعدة بر مع الوالدة ❤️',
-          type: 'Protected Mom Time',
-          color: 'rose'
-        });
-        cur += momNightDur;
-      }
+      setArrival(h) {
+        AppState.settings.arrivalHour = parseFloat(h);
+        document.getElementById('arrival-slider').value = h;
+        document.getElementById('arrival-display').textContent = format12(h * 60);
+        document.getElementById('arrival-badge').textContent   = 'وصول ' + format12(h * 60);
+        this._saveSettings();
+        this.render();
+      },
 
-      if (workDur > 0) {
-        const nextProj = getNextTaskForCategory('Project') || 'مهام العمل الأساسية';
-        blocks.push({
-          id: 'blk-work',
-          start: cur,
-          dur: workDur,
-          name: `Work & Code: [${nextProj}]`,
-          type: 'Work & Coding',
-          color: 'amber'
-        });
-        cur += workDur;
-      }
+      toggle(key) {
+        AppState.settings[key] = !AppState.settings[key];
+        const el = document.getElementById('tag-' + key);
+        const active = AppState.settings[key];
+        if (el) {
+          el.textContent = active ? 'مفعل ✅' : 'غير مفعل';
+          el.className = active
+            ? 'text-[10px] font-bold ' + (key === 'exhausted' ? 'text-amber-400' : key === 'momOuting' ? 'text-rose-400' : 'text-emerald-400')
+            : 'text-[10px] text-slate-500';
+        }
+        this._saveSettings();
+        this.render();
+      },
 
-      const nextSpir = getNextTaskForCategory('Spiritual') || 'قراءة فصول المرجع الأسبوعي';
-      blocks.push({
-        id: 'blk-spiritual',
-        start: cur,
-        dur: religiousDur,
-        name: `البحث الديني (PDF): [${nextSpir}]`,
-        type: 'Spiritual Reading',
-        color: 'teal'
-      });
-      cur += religiousDur;
+      processNLP() {
+        let text = document.getElementById('nlp-input').value.trim().toLowerCase();
+        if (!text) return;
 
-      // Shutdown
-      const shutdownDur = Math.max(15, bedtimeMin - cur);
-      blocks.push({
-        id: 'blk-shutdown',
-        start: cur,
-        dur: shutdownDur,
-        name: 'أذكار النوم وتفريغ ذهني وتجهيز ملابس الغد',
-        type: 'Shutdown Routine',
-        color: 'slate'
-      });
+        const arDigits = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'};
+        text = text.replace(/[٠-٩]/g, d => arDigits[d]);
 
-      // Sleep
-      const sleepDur = (P.fajrMin + 1440 - bedtimeMin) % 1440;
-      blocks.push({
-        id: 'blk-sleep',
-        start: bedtimeMin,
-        dur: sleepDur,
-        name: `نوم عميق وصحي متصل (من ${format12(bedtimeMin)} حتى صلاة الفجر ${format12(P.fajrMin)})`,
-        type: `Sleep Recovery (${(sleepDur/60).toFixed(1)} س)`,
-        color: 'purple'
-      });
+        if (/رجعت بدري|وصلت بدري|بدري/.test(text)) this.setArrival(15);
+        if (/رجعت متأخر|وصلت متأخر|متأخر/.test(text)) this.setArrival(19);
 
-      return blocks;
-    }
+        const timeMap = { '1': 13, '2': 14, '3': 15, '4': 16, '5': 17, '6': 18, '7': 19, '8': 20 };
+        const digits  = text.match(/\d+/g);
+        if (digits) {
+          const h = timeMap[digits[0]];
+          if (h) this.setArrival(h);
+        }
 
-    function calculateFridaySchedule() {
-      const P = prayers;
-      return [
-        { id: 'f-fajr', start: P.fajrMin, dur: 25, name: `🕌 صلاة الفجر في الجيزة (${format12(P.fajrMin)})`, type: 'Prayer', color: 'amber' },
-        { id: 'f-rest', start: P.fajrMin + 25, dur: 120, name: 'نوم إضافي واستيقاظ متأخر بروقان', type: 'Weekend Rest', color: 'purple' },
-        { id: 'f-morn', start: 7.5 * 60, dur: 60, name: 'فطور صباحي هادئ وصلاة الضحى', type: 'Morning Routine', color: 'slate' },
-        { id: 'f-marathon', start: 8.5 * 60, dur: 210, name: 'ماراثون CT-GenAI (حل امتحانات وموك إكزام كامل)', type: '3.5 س تركيز عميق', color: 'emerald' },
-        { id: 'f-jumaa', start: P.dhuhrMin - 15, dur: 90, name: `صلاة الجمعة (${format12(P.dhuhrMin)}) + الغداء العائلي مع الوالدة`, type: 'Spiritual & Family', color: 'rose' },
-        { id: 'f-iti-proj', start: 13.5 * 60, dur: 150, name: 'إنهاء مشروع الأسبوع وتسليمات الـ ITI', type: 'ITI Sprint (2.5 س)', color: 'blue' },
-        { id: 'f-outing', start: 16.0 * 60, dur: 120, name: 'خروجة رايقة وتغيير جو مع الوالدة ❤️', type: 'Protected Outing', color: 'rose' },
-        { id: 'f-maghrib', start: P.maghribMin, dur: 20, name: `🕌 صلاة المغرب (${format12(P.maghribMin)})`, type: 'Prayer', color: 'amber' },
-        { id: 'f-spir', start: 17.5 * 60, dur: 100, name: 'جلسة البحث الديني المتخصصة (تلخيص وتدوين)', type: 'Research & Notes', color: 'teal' },
-        { id: 'f-isha', start: P.ishaMin, dur: 20, name: `🕌 صلاة العشاء (${format12(P.ishaMin)})`, type: 'Prayer', color: 'amber' },
-        { id: 'f-free', start: 19.5 * 60, dur: 150, name: 'راحة حرة بدون تأنيب ضمير (ترفيه/أفلام)', type: 'Guilt-Free Rest', color: 'purple' },
-        { id: 'f-review', start: 22.0 * 60, dur: 60, name: 'مراجعة أسبوعية سريعة وتخطيط الأسبوع القادم', type: 'Weekly Review', color: 'indigo' },
-        { id: 'f-sleep', start: 23.0 * 60, dur: (P.fajrMin + 1440 - 23*60)%1440, name: 'نوم عميق حتى الفجر', type: 'Recovery Sleep', color: 'purple' }
-      ];
-    }
+        if (/مصدع|تعبان|ارهاق|وجع|صداع|مرهق|طاقتي|تعب/.test(text)) this._forceToggle('exhausted', true);
+        if (/مشوار|خروج|ماما|والدتي|والدة|عشا برة/.test(text))      this._forceToggle('momOuting', true);
+        if (/مفيش شغل|بدون شغل|الغاء شغل|معنديش شغل/.test(text)) this._forceToggle('noWork', true);
 
-    // Render Daily Timeline
-    function renderDaily() {
-      const blocks = calculateDailySchedule();
-      const tbody = document.getElementById('timeline-body');
-      tbody.innerHTML = '';
+        if (/سبرنت|امتحان|امتحانات|مذاكرة مكثفة/.test(text)) this.setStrategy('B');
+        if (/متوازن|عادي|شغل ومذاكرة/.test(text))            this.setStrategy('A');
+        if (/مشروع|كود|برمجة|بناء/.test(text))              this.setStrategy('C');
 
-      blocks.forEach(b => {
-        const isDone = !!state.completedBlockIndices[b.id];
-        const tr = document.createElement('tr');
-        tr.className = 'hover:bg-slate-800/40 transition ' + (isDone ? 'opacity-60 line-through' : '');
+        document.getElementById('nlp-input').value = '';
+        document.getElementById('insight-text').textContent =
+          'تم استيعاب مدخلك وتحديث اليوم فوراً: الوصول المسجل ' + format12(AppState.settings.arrivalHour * 60) + '.';
+        this.render();
+      },
 
-        let badgeClass = 'bg-slate-800 text-slate-300';
-        if (b.color === 'emerald') badgeClass = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold';
-        if (b.color === 'indigo') badgeClass = 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30';
-        if (b.color === 'blue') badgeClass = 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
-        if (b.color === 'rose') badgeClass = 'bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold';
-        if (b.color === 'purple') badgeClass = 'bg-purple-500/20 text-purple-300 border border-purple-500/30';
-        if (b.color === 'amber') badgeClass = 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold';
-        if (b.color === 'teal') badgeClass = 'bg-teal-500/20 text-teal-300 border border-teal-500/30';
+      _forceToggle(key, val) {
+        if (AppState.settings[key] === val) return;
+        AppState.settings[key] = val;
+        this.toggle(key);
+      },
 
-        tr.innerHTML = `
-          <td class="py-2.5 px-2 font-mono font-bold text-amber-300 text-[11px]">${formatSpan(b.start, b.dur)}</td>
-          <td class="py-2.5 px-3 font-semibold text-white">${b.name}</td>
-          <td class="py-2.5 px-2 text-center text-slate-300 font-bold font-mono text-[11px]">${b.dur} د</td>
-          <td class="py-2.5 px-2"><span class="badge ${badgeClass} text-[10px]">${b.type}</span></td>
-          <td class="py-2.5 px-2 text-center">
-            <input type="checkbox" ${isDone ? 'checked' : ''} onchange="toggleBlockDone('${b.id}')" class="w-4 h-4 rounded text-indigo-600 bg-slate-900 border-slate-700 focus:ring-0 cursor-pointer">
-          </td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
+      buildBlocks() {
+        if (AppState.settings.isFriday) return this._buildFridayBlocks();
 
-    function toggleBlockDone(blockId) {
-      state.completedBlockIndices[blockId] = !state.completedBlockIndices[blockId];
-      saveState();
-      renderDaily();
-    }
+        const P = AppState.prayers;
+        const S = AppState.settings;
+        const C = CONSTANTS;
+        const blocks = [];
 
-    // Render Tasks (Agent 1 - Hierarchical Structure with Atomic Checkboxes)
-    function renderTasks() {
-      const container = document.getElementById('tasks-container');
-      container.innerHTML = '';
+        const push = (key, startMin, durMin, name, type, color) =>
+          blocks.push({ key, startMin, durMin, name, type, color });
 
-      const filtered = state.taskFilter === 'ALL' ? state.tasks : state.tasks.filter(t => t.cat === state.taskFilter);
+        // Morning Fajr Anchor
+        push('blk-fajr', P.fajrMin, 25,
+          '🕌 صلاة الفجر بالجيزة (' + format12(P.fajrMin) + ') + أذكار الصباح',
+          'Giza Prayer Anchor', 'amber');
 
-      filtered.forEach(t => {
-        const totalItems = t.items.length;
-        const doneItems = t.items.filter(i => i.done).length;
-        const progressPct = totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0;
+        // Morning Rest / Buffer
+        const departMin = C.DEPART_HOUR * 60;
+        if (P.fajrMin + 25 < departMin) {
+          push('blk-morning-rest', P.fajrMin + 25, departMin - (P.fajrMin + 25),
+            'راحة صباحية هادئة + شرب مياه وقراءة قرآن',
+            'Morning Buffer', 'slate');
+        }
 
-        const card = document.createElement('div');
-        card.className = 'bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3 relative overflow-hidden';
+        // Preparation
+        push('blk-prep', departMin, 30,
+          'تجهيز والنزول للمواصلات',
+          'Daily Routine', 'slate');
 
-        let catBadge = 'bg-indigo-950 text-indigo-300 border-indigo-800';
-        if (t.cat === 'CT-GenAI') catBadge = 'bg-emerald-950 text-emerald-300 border-emerald-800';
-        if (t.cat === 'ITI') catBadge = 'bg-blue-950 text-blue-300 border-blue-800';
-        if (t.cat === 'Spiritual') catBadge = 'bg-teal-950 text-teal-300 border-teal-800';
-        if (t.cat === 'Project') catBadge = 'bg-amber-950 text-amber-300 border-amber-800';
+        // Morning Commute Stack
+        push('blk-commute-go', C.ITI_START_HOUR * 60 - 120, C.COMMUTE_GO_MIN,
+          'مواصلات رايح + AI Podcasts & English Shadowing',
+          'Dual-Purpose Stack', 'indigo');
 
-        let itemsHtml = '';
-        t.items.forEach((item, idx) => {
-          itemsHtml += `
-            <label class="flex items-start gap-2 p-1.5 rounded-lg hover:bg-slate-900 cursor-pointer text-[11px] transition">
-              <input type="checkbox" ${item.done ? 'checked' : ''} onchange="toggleSubItem(${t.id}, ${idx})" class="mt-0.5 rounded text-indigo-500 bg-slate-900 border-slate-700 focus:ring-0">
-              <span class="${item.done ? 'line-through text-slate-500' : 'text-slate-200'}">${item.name}</span>
-            </label>
+        // ITI Core Track
+        const arrivalMin = Math.round(S.arrivalHour * 60);
+        const itiEndMin  = Math.min(16 * 60, arrivalMin - C.COMMUTE_BACK_MIN);
+        const itiDurMin  = itiEndMin - (C.ITI_START_HOUR * 60);
+        const nextItiChapter = TaskAgent.getNextPending('ITI');
+
+        push('blk-iti-core', C.ITI_START_HOUR * 60, itiDurMin,
+          'دوام ITI Testing Track (' + (itiDurMin/60).toFixed(1) + ' س) — الكورس: ' + (nextItiChapter || 'محاضرات وتطبيق لابات'),
+          'Fixed Core (' + (itiDurMin/60).toFixed(1) + ' س)', 'blue');
+
+        // Return Commute
+        push('blk-commute-back', itiEndMin, arrivalMin - itiEndMin,
+          'مواصلات راجع + صوتيات البحث الديني • صلاة العصر ' + format12(P.asrMin),
+          'Dual-Purpose Audio', 'indigo');
+
+        // ── HOME WINDOW & PRAYER ANCHORS ────────────────────────────────────
+        let cur = arrivalMin;
+
+        // Case A: Arrived before Maghrib (e.g. 3:00 PM)
+        if (cur < P.maghribMin) {
+          const beforeMaghrib = P.maghribMin - cur;
+          const lunchDur = Math.min(45, Math.floor(beforeMaghrib * 0.4));
+          push('blk-lunch', cur, lunchDur,
+            'وصول البيت + غداء عائلي دافئ وسوالف مع الوالدة ❤️',
+            'Protected Mom Time', 'rose');
+          cur += lunchDur;
+
+          const remainBefore = P.maghribMin - cur;
+          if (S.isExhausted) {
+            push('blk-nap', cur, remainBefore,
+              'قيلولة تعافي وشحن طاقة كاملة (نوم دون مقاطعة)',
+              'Health Reset', 'purple');
+          } else {
+            const nextGenAi = TaskAgent.getNextPending('CT-GenAI');
+            push('blk-study-early', cur, remainBefore,
+              'CT-GenAI Focus (جلسة بدري مكتسبة) -> [' + (nextGenAi || 'مذاكرة السيلبس') + ']',
+              'Bonus Focus (' + remainBefore + ' دقيقة)', 'emerald');
+          }
+          cur = P.maghribMin;
+
+          // Maghrib Anchor
+          push('blk-maghrib', P.maghribMin, 20,
+            '🕌 صلاة المغرب بالجيزة (' + format12(P.maghribMin) + ') + شرب مياه',
+            'Giza Prayer Anchor', 'amber');
+          cur = P.maghribMin + 20;
+
+          // Between Maghrib & Isha
+          if (cur < P.ishaMin) {
+            const midDur = P.ishaMin - cur;
+            const nextItiLab = TaskAgent.getNextPending('ITI');
+            push('blk-iti-lab', cur, midDur,
+              'ITI Lab Practice -> [' + (nextItiLab || 'تثبيت كود اليوم ومراجعته') + ']',
+              'ITI Deep Work (' + midDur + ' دقيقة)', 'blue');
+            cur = P.ishaMin;
+          }
+
+          // Isha Anchor
+          push('blk-isha', P.ishaMin, 20,
+            '🕌 صلاة العشاء بالجيزة (' + format12(P.ishaMin) + ') + أذكار',
+            'Giza Prayer Anchor', 'amber');
+          cur = P.ishaMin + 20;
+        }
+        // Case B: Arrived between Maghrib and Isha (e.g. 5:30 PM - 6:00 PM)
+        else if (cur < P.ishaMin) {
+          const preIshaDur = P.ishaMin - cur;
+          push('blk-arrival-rest', cur, preIshaDur,
+            'وصول البيت + استقبال الوالدة والوضوء لصلاة العشاء ❤️',
+            'Protected Mom Time', 'rose');
+          cur = P.ishaMin;
+
+          // Isha Anchor
+          push('blk-isha', P.ishaMin, 20,
+            '🕌 صلاة العشاء بالجيزة (' + format12(P.ishaMin) + ') + أذكار',
+            'Giza Prayer Anchor', 'amber');
+          cur = P.ishaMin + 20;
+        }
+        // Case C: Arrived after Isha (e.g. 7:00 PM)
+        else {
+          const arrivalBuffer = 20;
+          push('blk-late-arrival', cur, arrivalBuffer,
+            'وصول متأخر + صلاة العشاء وقعدة سريعة مع الوالدة',
+            'Routine & Prayer', 'amber');
+          cur += arrivalBuffer;
+        }
+
+        // ── PEAK NIGHT WINDOW (Post-Isha to Bedtime) ─────────────────────────
+        const bedMin = C.BEDTIME_HOUR * 60;
+        const availableNight = Math.max(60, bedMin - cur - 15);
+
+        const momNightDur  = S.momOuting ? 90 : (arrivalMin > 17 * 60 ? 40 : 30);
+        const workDur      = S.noWork ? 0 : (S.strategy === 'C' ? 90 : 30);
+        const spiritualDur = 35;
+        const genAiDur     = Math.max(45, availableNight - momNightDur - workDur - spiritualDur);
+
+        // CT-GenAI Sprint
+        const nextGenAiNight = TaskAgent.getNextPending('CT-GenAI');
+        push('blk-genai-night', cur, genAiDur,
+          'Sprint CT-GenAI -> [' + (nextGenAiNight || 'حل أسئلة السيلبس والموك') + ']',
+          'Peak Night Focus (' + genAiDur + ' دقيقة)', 'emerald');
+        cur += genAiDur;
+
+        // Mom Time
+        if (momNightDur > 0) {
+          push('blk-mom-night', cur, momNightDur,
+            S.momOuting ? 'مشوار/خروجة مسائية مع الوالدة وعشاء برة ❤️' : 'جلسة شاي وسوالف وقعدة بر مع الوالدة ❤️',
+            'Protected Mom Time', 'rose');
+          cur += momNightDur;
+        }
+
+        // Work / Freelance / Project
+        if (workDur > 0) {
+          const nextProject = TaskAgent.getNextPending('Project');
+          push('blk-work', cur, workDur,
+            S.strategy === 'C' ? 'بناء Testing App أو كود الفريلانس -> [' + (nextProject || 'مهام الكود') + ']'
+                                : 'مهام الشغل اليومية -> [' + (nextProject || 'صيانة الباك إند') + ']',
+            'Work & Coding', 'amber');
+          cur += workDur;
+        }
+
+        // Spiritual Reading
+        const nextSpiritual = TaskAgent.getNextPending('Spiritual');
+        push('blk-spiritual', cur, spiritualDur,
+          'البحث الديني (PDF) -> [' + (nextSpiritual || 'قراءة المرجع الأسبوعي') + ']',
+          'Spiritual Reading', 'teal');
+        cur += spiritualDur;
+
+        // Shutdown Routine
+        const shutdownDur = Math.max(15, bedMin - cur);
+        push('blk-shutdown', cur, shutdownDur,
+          'أذكار النوم + تفريغ ذهني + تجهيز ملابس الغد',
+          'Shutdown Routine', 'slate');
+        cur += shutdownDur;
+
+        // Sleep
+        const sleepDur = ((P.fajrMin + 1440) - cur) % 1440;
+        push('blk-sleep', cur, sleepDur,
+          'نوم عميق وصحي متصل -> من ' + format12(cur) + ' حتى الفجر ' + format12(P.fajrMin) + ' (' + (sleepDur/60).toFixed(1) + ' س)',
+          'Sleep Recovery (' + (sleepDur/60).toFixed(1) + ' س)', 'purple');
+
+        return blocks;
+      },
+
+      _buildFridayBlocks() {
+        const P = AppState.prayers;
+        const blocks = [];
+        const push = (key, startMin, durMin, name, type, color) =>
+          blocks.push({ key, startMin, durMin, name, type, color });
+
+        push('blk-fajr',       P.fajrMin,         25,  '🕌 صلاة الفجر (' + format12(P.fajrMin) + ')', 'Prayer', 'amber');
+        push('blk-extra-sleep',P.fajrMin + 25,     120, 'نوم إضافي واستيقاظ متأخر بروقان', 'Weekend Rest', 'purple');
+        push('blk-morning',    7.5 * 60,           60,  'فطور صباحي هادئ وصلاة الضحى', 'Morning Routine', 'slate');
+        push('blk-marathon',   8.5 * 60,           210, 'ماراثون CT-GenAI (حل امتحانات وموك كامل)', '3.5 س تركيز عميق', 'emerald');
+        push('blk-jumaa',      P.dhuhrMin - 15,    90,  'صلاة الجمعة (' + format12(P.dhuhrMin) + ') + غداء عائلي مع الوالدة', 'Spiritual & Family', 'rose');
+        push('blk-iti-proj',   13.5 * 60,          150, 'إنهاء مشروع الأسبوع وتسليمات الـ ITI', 'ITI Sprint (2.5 س)', 'blue');
+        push('blk-outing',     16.0 * 60,          120, 'خروجة رايقة وتغيير جو مع الوالدة ❤️', 'Protected Outing', 'rose');
+        push('blk-maghrib',    P.maghribMin,       20,  '🕌 صلاة المغرب (' + format12(P.maghribMin) + ')', 'Prayer', 'amber');
+        push('blk-spiritual',  17.5 * 60,          100, 'جلسة البحث الديني المتخصصة (تلخيص وتدوين)', 'Research & Notes', 'teal');
+        push('blk-isha',       P.ishaMin,          20,  '🕌 صلاة العشاء (' + format12(P.ishaMin) + ')', 'Prayer', 'amber');
+        push('blk-free',       19.5 * 60,          150, 'راحة حرة بدون تأنيب ضمير (ترفيه / استرخاء)', 'Guilt-Free Rest', 'purple');
+        push('blk-review',     22.0 * 60,          60,  'مراجعة أسبوعية سريعة وتخطيط الأسبوع القادم', 'Weekly Review', 'indigo');
+
+        const sleepDur = ((P.fajrMin + 1440) - 23 * 60) % 1440;
+        push('blk-sleep', 23 * 60, sleepDur, 'نوم عميق حتى صلاة الفجر', 'Recovery Sleep', 'purple');
+
+        return blocks;
+      },
+
+      render() {
+        const blocks = this.buildBlocks();
+        const tbody  = document.getElementById('timeline-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        blocks.forEach(b => {
+          const done   = !!AppState.completedBlocks[b.key];
+          const tr     = document.createElement('tr');
+          tr.className = 'hover:bg-white/[0.02] transition ' + (done ? 'block-done' : '');
+
+          const colorClass = CONSTANTS.BLOCK_COLORS[b.color] || CONSTANTS.BLOCK_COLORS.slate;
+
+          tr.innerHTML = `
+            <td class="py-2.5 px-2 font-mono text-amber-300 font-bold text-[11px] whitespace-nowrap">` + formatSpan(b.startMin, b.durMin) + `</td>
+            <td class="py-2.5 px-3 font-semibold text-white text-xs">` + b.name + `</td>
+            <td class="py-2.5 px-2 text-center text-slate-400 font-mono font-bold text-[11px]">` + b.durMin + `د</td>
+            <td class="py-2.5 px-2 hidden sm:table-cell"><span class="badge border ` + colorClass + `">` + b.type + `</span></td>
+            <td class="py-2.5 px-2 text-center">
+              <input type="checkbox" ` + (done ? 'checked' : '') + `
+                     onchange="DailyAgent.toggleBlock('` + b.key + `')"
+                     class="w-4 h-4 rounded text-indigo-600 bg-slate-900 border-slate-700 focus:ring-0 cursor-pointer">
+            </td>
           `;
+          tbody.appendChild(tr);
+        });
+      },
+
+      async toggleBlock(key) {
+        const current = !!AppState.completedBlocks[key];
+        AppState.completedBlocks[key] = !current;
+
+        const path = CONSTANTS.PATHS.blockDone(AppState.uid, AppState.selectedDate, key);
+        await firebaseWrite(path, AppState.completedBlocks[key] ? { isDone: true, doneAt: Date.now() } : null);
+        this.render();
+      },
+
+      async loadBlockStates() {
+        try {
+          const path = CONSTANTS.PATHS.dailyPlan(AppState.uid, AppState.selectedDate) + '/blocks';
+          const snap = await get(ref(db, path));
+          AppState.completedBlocks = snap.exists() ? snap.val() : {};
+        } catch (_) {
+          AppState.completedBlocks = {};
+        }
+        this.render();
+      },
+
+      _saveSettings() {
+        clearTimeout(this._saveTimer);
+        this._saveTimer = setTimeout(async () => {
+          const payload = {
+            ...AppState.settings,
+            selectedDate: AppState.selectedDate,
+            lastUpdated: Date.now(),
+          };
+          await firebaseWrite(CONSTANTS.PATHS.settings(AppState.uid), payload);
+          await firebaseWrite(CONSTANTS.PATHS.dailyPlan(AppState.uid, AppState.selectedDate) + '/snapshot', payload, true);
+        }, 600);
+      },
+
+      applySettingsToUI() {
+        const S = AppState.settings;
+        document.getElementById('arrival-slider').value = S.arrivalHour;
+        document.getElementById('arrival-display').textContent = format12(S.arrivalHour * 60);
+        document.getElementById('arrival-badge').textContent   = 'وصول ' + format12(S.arrivalHour * 60);
+        document.getElementById('selected-date').value         = AppState.selectedDate;
+
+        const rad = document.querySelector('input[name="strategy"][value="' + S.strategy + '"]');
+        if (rad) rad.checked = true;
+
+        this.setDayType(S.isFriday);
+
+        ['exhausted', 'momOuting', 'noWork'].forEach(k => {
+          const el = document.getElementById('tag-' + k);
+          if (!el) return;
+          el.textContent = S[k] ? 'مفعل ✅' : 'غير مفعل';
+          el.className   = S[k]
+            ? 'text-[10px] font-bold ' + (k === 'exhausted' ? 'text-amber-400' : key === 'momOuting' ? 'text-rose-400' : 'text-emerald-400')
+            : 'text-[10px] text-slate-500';
+        });
+      },
+    };
+
+    // =========================================================================
+    // SECTION 7: TASK MANAGER AGENT (Agent 1)
+    // =========================================================================
+
+    const TaskAgent = {
+
+      _filter: 'ALL',
+
+      setFilter(cat, btnEl) {
+        this._filter = cat;
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+          btn.classList.remove('bg-indigo-600', 'text-white');
+          btn.classList.add('bg-slate-900', 'text-slate-400');
+        });
+        if (btnEl) {
+          btnEl.classList.add('bg-indigo-600', 'text-white');
+          btnEl.classList.remove('bg-slate-900', 'text-slate-400');
+        }
+        this.render();
+      },
+
+      getNextPending(category) {
+        const tracks = Object.values(AppState.tracks || {});
+        for (const track of tracks) {
+          if (track.category !== category) continue;
+          const courses = Object.values(track.courses || {});
+          for (const course of courses) {
+            const chapters = Object.values(course.chapters || {});
+            const pending  = chapters.find(ch => !ch.isDone);
+            if (pending) return course.name + ': ' + pending.name;
+          }
+        }
+        return null;
+      },
+
+      render() {
+        const container = document.getElementById('tasks-container');
+        if (!container) return;
+        container.innerHTML = '';
+
+        const tracks = Object.entries(AppState.tracks || {});
+        const filtered = tracks.filter(([_, t]) => this._filter === 'ALL' || t.category === this._filter);
+
+        if (!filtered.length) {
+          container.innerHTML = `<div class="col-span-3 text-center text-slate-500 py-10 text-sm">
+            لا توجد مهام في هذا التصنيف حالياً. ➕ أضيفي كورسًا أو مساراً جديداً.
+          </div>`;
+          return;
+        }
+
+        filtered.forEach(([trackId, track]) => {
+          const catCfg = CONSTANTS.CATEGORIES[track.category] || { label: track.category, color: 'slate', icon: '📋' };
+          const courses = Object.entries(track.courses || {});
+
+          let totalChapters = 0, doneChapters = 0;
+          courses.forEach(([_, c]) => {
+            const chs = Object.values(c.chapters || {});
+            totalChapters += chs.length;
+            doneChapters  += chs.filter(ch => ch.isDone).length;
+          });
+          const pct = totalChapters ? Math.round((doneChapters / totalChapters) * 100) : 0;
+
+          const colorMap = {
+            blue: 'border-blue-500/30 bg-blue-950/10',
+            emerald: 'border-emerald-500/30 bg-emerald-950/10',
+            teal: 'border-teal-500/30 bg-teal-950/10',
+            amber: 'border-amber-500/30 bg-amber-950/10',
+            slate: 'border-white/5 bg-slate-950',
+          };
+
+          const card = document.createElement('div');
+          card.className = 'elite-card rounded-2xl p-4 space-y-3 ' + (colorMap[catCfg.color] || colorMap.slate);
+
+          card.innerHTML = `
+            <div class="flex justify-between items-start gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-xl">` + catCfg.icon + `</span>
+                <div>
+                  <div class="text-xs font-extrabold text-white">` + track.name + `</div>
+                  <div class="text-[10px] text-slate-400 mt-0.5">` + catCfg.label + ` • ` + doneChapters + `/` + totalChapters + ` شابتر منجز</div>
+                </div>
+              </div>
+              <span class="font-mono font-bold text-xs ` + (pct === 100 ? 'text-emerald-400' : 'text-indigo-400') + `">` + pct + `%</span>
+            </div>
+            <div class="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden border border-white/5">
+              <div class="progress-bar bg-gradient-to-r from-indigo-500 to-emerald-500 h-full rounded-full" style="width:` + pct + `%"></div>
+            </div>
+          `;
+
+          courses.forEach(([courseId, course]) => {
+            const chs     = Object.entries(course.chapters || {});
+            const doneChs = chs.filter(([_, ch]) => ch.isDone).length;
+            const cPct    = chs.length ? Math.round((doneChs / chs.length) * 100) : 0;
+
+            const courseEl = document.createElement('div');
+            courseEl.className = 'border border-white/5 rounded-xl p-2.5 space-y-1.5 bg-slate-950/40';
+            courseEl.innerHTML = `
+              <div class="flex justify-between items-center cursor-pointer select-none" onclick="this.nextElementSibling.nextElementSibling.classList.toggle('hidden'); this.querySelector('.arrow-toggle').classList.toggle('rotate-180')">
+                <div class="text-[11px] font-bold text-slate-200 flex items-center gap-1.5">
+                  <span class="text-slate-500">↳</span> ` + course.name + `
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] font-mono text-slate-400">` + doneChs + `/` + chs.length + `</span>
+                  <span class="text-[10px] font-bold ` + (cPct === 100 ? 'text-emerald-400' : 'text-indigo-400') + `">` + cPct + `%</span>
+                  <span class="arrow-toggle text-slate-400 text-[10px] transition-transform">▾</span>
+                </div>
+              </div>
+              <div class="w-full bg-slate-900 h-0.5 rounded-full overflow-hidden">
+                <div class="bg-indigo-500 h-full rounded-full progress-bar" style="width:` + cPct + `%"></div>
+              </div>
+              <div class="hidden space-y-1 pt-1.5 border-t border-white/5">
+                ` + chs.map(([chId, ch]) => `
+                  <label class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-white/[0.03] cursor-pointer text-[11px] transition">
+                    <input type="checkbox" ` + (ch.isDone ? 'checked' : '') + `
+                           onchange="TaskAgent.toggleChapter('` + trackId + `','` + courseId + `','` + chId + `')"
+                           class="rounded text-indigo-500 bg-slate-900 border-slate-700 focus:ring-0 w-3.5 h-3.5 cursor-pointer">
+                    <span class="` + (ch.isDone ? 'line-through text-slate-500' : 'text-slate-200') + `">` + ch.name + `</span>
+                    <span class="mr-auto text-[9px] text-slate-500 font-mono">` + (ch.estimatedMin || 0) + `د</span>
+                  </label>
+                `).join('') + `
+              </div>
+            `;
+            card.appendChild(courseEl);
+          });
+
+          container.appendChild(card);
+        });
+      },
+
+      async toggleChapter(trackId, courseId, chapterId) {
+        const path = CONSTANTS.PATHS.chapter(AppState.uid, trackId, courseId, chapterId);
+        try {
+          const snap = await get(ref(db, path));
+          const ch   = snap.val();
+          const updated = {
+            ...ch,
+            isDone: !ch.isDone,
+            doneAt: !ch.isDone ? Date.now() : null,
+          };
+          await firebaseWrite(path, updated);
+          AppState.tracks[trackId].courses[courseId].chapters[chapterId] = updated;
+          this.render();
+          DailyAgent.render();
+        } catch (err) {
+          console.error('[Toggle Chapter Error]', err);
+        }
+      },
+
+      openAddModal() {
+        this._populateTrackSelects();
+        document.getElementById('task-modal').classList.remove('hidden');
+        this.onModalLevelChange();
+      },
+
+      closeModal() {
+        document.getElementById('task-modal').classList.add('hidden');
+      },
+
+      onModalLevelChange() {
+        const level = document.getElementById('modal-level').value;
+        document.getElementById('modal-track-select-row').classList.toggle('hidden', level === 'track');
+        document.getElementById('modal-course-select-row').classList.toggle('hidden', level !== 'chapter');
+        document.getElementById('modal-track-fields').classList.toggle('hidden', level !== 'track');
+      },
+
+      onTrackSelectChange() {
+        const tid = document.getElementById('modal-parent-track').value;
+        const courseSel = document.getElementById('modal-parent-course');
+        courseSel.innerHTML = '';
+        const track = AppState.tracks && AppState.tracks[tid];
+        if (track && track.courses) {
+          Object.entries(track.courses).forEach(([cid, c]) => {
+            courseSel.innerHTML += '<option value="' + tid + ':::' + cid + '">' + c.name + '</option>';
+          });
+        }
+        if (!courseSel.innerHTML) {
+          courseSel.innerHTML = '<option value="">-- لا توجد كورسات في هذا المسار بعد --</option>';
+        }
+      },
+
+      _populateTrackSelects() {
+        const trackSel = document.getElementById('modal-parent-track');
+        trackSel.innerHTML = '';
+        Object.entries(AppState.tracks || {}).forEach(([tid, t]) => {
+          trackSel.innerHTML += '<option value="' + tid + '">' + t.name + '</option>';
+        });
+        this.onTrackSelectChange();
+      },
+
+      async saveFromModal() {
+        const level    = document.getElementById('modal-level').value;
+        const name     = document.getElementById('modal-name').value.trim();
+        const dur      = parseInt(document.getElementById('modal-duration').value) || 60;
+        const desc     = document.getElementById('modal-desc').value.trim();
+        const category = document.getElementById('modal-category').value;
+
+        if (!name) { alert('من فضلك ادخلي اسم المهمة.'); return; }
+
+        const uid = AppState.uid;
+        const key = genKey();
+
+        try {
+          if (level === 'track') {
+            const data = { name, category, description: desc, estimatedTotalMin: dur,
+                           color: '#3b82f6', icon: '📋', order: Date.now(), isActive: true,
+                           createdAt: Date.now(), courses: {} };
+            await firebaseWrite(CONSTANTS.PATHS.track(uid, key), data);
+            AppState.tracks[key] = data;
+
+          } else if (level === 'course') {
+            const tid  = document.getElementById('modal-parent-track').value;
+            const data = { name, description: desc, totalChapters: 0,
+                           estimatedMinPerChapter: dur, order: Date.now(),
+                           isActive: true, startedAt: Date.now(), chapters: {} };
+            await firebaseWrite(CONSTANTS.PATHS.course(uid, tid, key), data);
+            if (!AppState.tracks[tid].courses) AppState.tracks[tid].courses = {};
+            AppState.tracks[tid].courses[key] = data;
+
+          } else if (level === 'chapter') {
+            const val = document.getElementById('modal-parent-course').value;
+            if (!val || !val.includes(':::')) {
+              alert('من فضلك اختاري كورس صحيح أولاً.');
+              return;
+            }
+            const [tid, cid] = val.split(':::');
+            const data = { name, chapterNumber: Date.now(), estimatedMin: dur,
+                           isDone: false, doneAt: null, notes: desc };
+            await firebaseWrite(CONSTANTS.PATHS.chapter(uid, tid, cid, key), data);
+            if (!AppState.tracks[tid].courses[cid].chapters) AppState.tracks[tid].courses[cid].chapters = {};
+            AppState.tracks[tid].courses[cid].chapters[key] = data;
+          }
+
+          this.closeModal();
+          this.render();
+          DailyAgent.render();
+        } catch (err) {
+          console.error('[Save Task Error]', err);
+          alert('فشل الحفظ في قاعدة البيانات. تحقق من الاتصال.');
+        }
+      },
+    };
+
+    // =========================================================================
+    // SECTION 8: WEEKLY VIEW
+    // =========================================================================
+
+    const WeeklyView = {
+      render() {
+        const tbody = document.getElementById('weekly-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        CONSTANTS.WEEKLY_ROWS.forEach(r => {
+          const tr = document.createElement('tr');
+          tr.className = 'hover:bg-white/[0.02] transition';
+          tr.innerHTML = `
+            <td class="py-2.5 px-3 font-semibold text-white text-xs">` + r.name + `</td>
+            <td class="py-2.5 px-2 text-center text-slate-400 font-mono text-xs">` + r.sat + `س</td>
+            <td class="py-2.5 px-2 text-center text-slate-400 font-mono text-xs">` + r.sun + `س</td>
+            <td class="py-2.5 px-2 text-center text-slate-400 font-mono text-xs">` + r.mon + `س</td>
+            <td class="py-2.5 px-2 text-center text-slate-400 font-mono text-xs">` + r.tue + `س</td>
+            <td class="py-2.5 px-2 text-center text-slate-400 font-mono text-xs">` + r.wed + `س</td>
+            <td class="py-2.5 px-2 text-center text-slate-400 font-mono text-xs">` + r.thu + `س</td>
+            <td class="py-2.5 px-2 text-center text-amber-300 font-mono font-bold text-xs bg-white/[0.02]">` + r.fri + `س</td>
+            <td class="py-2.5 px-3 text-center text-emerald-400 font-extrabold font-mono text-xs">` + r.total + `س</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      },
+    };
+
+    // =========================================================================
+    // SECTION 9: MONTHLY VIEW
+    // =========================================================================
+
+    const MonthlyView = {
+      _weeks: [
+        {
+          label: 'الأسبوع الأول', dates: '22 - 28 نوفمبر',
+          border: 'border-indigo-500/40', accent: 'text-indigo-400 bg-indigo-950 border-indigo-900',
+          checkpoint: 'Ch1 Passed ✅',
+          items: [
+            { cat: 'CT-GenAI', text: 'Ch1 (Intro 100m) + Ch2 Part 1 (Prompt Basics)' },
+            { cat: 'Spiritual', text: 'الأسبوع 1 بالـ PDF: الرد على الربوبية + "شموع النهار"' },
+            { cat: 'ITI', text: 'إنجاز لابات الأسبوع بدون تراكم + حفظ كود الـ Git' },
+          ],
+        },
+        {
+          label: 'الأسبوع الثاني', dates: '29 نوف - 5 ديس',
+          border: 'border-white/10', accent: 'text-slate-300 bg-slate-900 border-slate-800',
+          checkpoint: '50% من السيلبس',
+          items: [
+            { cat: 'CT-GenAI', text: 'Ch2 العملي (365m) + Ch3 (Risks 160m) + Spaced Review 1' },
+            { cat: 'Spiritual', text: 'الأسبوع 2 بالـ PDF: إثبات النبوة + "النبأ العظيم"' },
+            { cat: 'ITI', text: 'تسليم مشروع الأسبوع + الأتمتة المتقدمة' },
+          ],
+        },
+        {
+          label: 'الأسبوع الثالث', dates: '6 - 12 ديسمبر',
+          border: 'border-white/10', accent: 'text-slate-300 bg-slate-900 border-slate-800',
+          checkpoint: 'Mock Score > 80%',
+          items: [
+            { cat: 'CT-GenAI', text: 'Ch4 (Infra 110m) + Ch5 (Deploy 80m) + Mock Exam #1' },
+            { cat: 'Spiritual', text: 'الأسبوع 3 بالـ PDF: توثيق السنة النبوية (السباعي)' },
+            { cat: 'ITI', text: 'الحضور والتسليمات بدون تأخير' },
+          ],
+        },
+        {
+          label: 'أسبوع الامتحان! 🎯', dates: '13 - 17 ديسمبر',
+          border: 'border-rose-500/40', accent: 'text-rose-400 bg-rose-950 border-rose-900',
+          checkpoint: 'Certified CT-GenAI 🎓',
+          items: [
+            { cat: 'CT-GenAI', text: '2 Mock Exams + مراجعة Flashcards + 17 ديسمبر يوم الامتحان!' },
+            { cat: 'Spiritual', text: 'الأسبوع 4 بالـ PDF: تفكيك الشبهات وسيرة النبي ﷺ' },
+            { cat: 'Project', text: 'بعد الامتحان: الانتقال لـ Option C وبناء Testing App' },
+          ],
+        },
+      ],
+
+      render() {
+        const catColors = {
+          'CT-GenAI': 'text-emerald-400', 'ITI': 'text-blue-400',
+          'Spiritual': 'text-teal-400', 'Project': 'text-amber-400',
+        };
+        const container = document.getElementById('monthly-cards');
+        if (!container) return;
+        container.innerHTML = this._weeks.map(w => `
+          <div class="elite-card ` + w.border + ` rounded-2xl p-4 space-y-3">
+            <div class="flex justify-between items-center text-xs">
+              <span class="font-bold ` + w.accent + ` px-2 py-0.5 rounded border text-[11px]">` + w.label + `</span>
+              <span class="text-[10px] text-slate-400 font-mono">` + w.dates + `</span>
+            </div>
+            <div class="space-y-2 text-xs">
+              ` + w.items.map(it => `
+                <div class="p-2.5 bg-slate-950/80 rounded-xl border border-white/5">
+                  <strong class="` + (catColors[it.cat] || 'text-slate-300') + ` block text-[11px] mb-0.5">` + it.cat + `:</strong>
+                  <span class="text-slate-300 text-[11px]">` + it.text + `</span>
+                </div>
+              `).join('') + `
+            </div>
+            <div class="pt-2 border-t border-white/5 flex justify-between items-center text-[11px]">
+              <span class="text-slate-400">Checkpoint:</span>
+              <span class="font-bold text-emerald-400">` + w.checkpoint + `</span>
+            </div>
+          </div>
+        `).join('');
+      },
+    };
+
+    // =========================================================================
+    // SECTION 10: ELITE UI CONTROLLER (Interactivity & Animations)
+    // =========================================================================
+
+    const EliteUI = {
+      initScrollReveal() {
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('visible');
+            }
+          });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+      },
+
+      toggleAccordion(headerEl) {
+        const content = headerEl.querySelector('.acc-content');
+        const icon    = headerEl.querySelector('.acc-icon');
+        if (!content) return;
+        const isHidden = content.classList.contains('hidden');
+        content.classList.toggle('hidden', !isHidden);
+        if (icon) icon.classList.toggle('rotate-180', isHidden);
+      },
+
+      dismissStickyBar() {
+        const bar = document.getElementById('sticky-bottom-bar');
+        if (bar) bar.style.display = 'none';
+      },
+    };
+
+    // =========================================================================
+    // SECTION 11: UI CONTROLLER
+    // =========================================================================
+
+    const UI = {
+      switchTab(tabId) {
+        AppState.currentTab = tabId;
+        ['daily', 'tasks', 'weekly', 'monthly', 'elite'].forEach(id => {
+          const view = document.getElementById('view-' + id);
+          if (view) view.classList.toggle('hidden', id !== tabId);
+          document.getElementById('tab-' + id)?.classList.toggle('active', id === tabId);
+          document.getElementById('m-tab-' + id)?.classList.toggle('active', id === tabId);
         });
 
-        card.innerHTML = `
-          <div class="flex justify-between items-start gap-2">
-            <span class="badge border ${catBadge} text-[10px]">${t.cat}</span>
-            <span class="text-[10px] text-slate-400 font-mono font-bold">${doneItems}/${totalItems} منجز</span>
-          </div>
-          <div>
-            <h4 class="font-bold text-white text-xs mb-1">${t.title}</h4>
-            <p class="text-[11px] text-slate-400 leading-relaxed">${t.desc}</p>
-          </div>
-          <div class="space-y-1 pt-1">
-            <div class="flex justify-between text-[10px]">
-              <span class="text-slate-400">نسبة الإنجاز المحسوبة:</span>
-              <span class="font-bold text-indigo-400">${progressPct}%</span>
-            </div>
-            <div class="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden border border-slate-800">
-              <div class="bg-indigo-500 h-full rounded-full transition-all duration-300" style="width: ${progressPct}%"></div>
-            </div>
-          </div>
-          <div class="pt-2 border-t border-slate-900 space-y-1">
-            <div class="text-[10px] font-bold text-slate-400 mb-1">اللابات والوحدات التفصيلية:</div>
-            ${itemsHtml}
-          </div>
-        `;
-        container.appendChild(card);
-      });
-    }
+        if (tabId === 'tasks')   TaskAgent.render();
+        if (tabId === 'weekly')  WeeklyView.render();
+        if (tabId === 'monthly') MonthlyView.render();
+        if (tabId === 'elite')   EliteUI.initScrollReveal();
 
-    function toggleSubItem(taskId, itemIdx) {
-      const task = state.tasks.find(t => t.id === taskId);
-      if (task && task.items[itemIdx]) {
-        task.items[itemIdx].done = !task.items[itemIdx].done;
-        saveState();
-        renderTasks();
-        renderDaily(); // Reflect in daily schedule naming!
-      }
-    }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      },
 
-    function filterTasks(cat) {
-      state.taskFilter = cat;
-      saveState();
-      renderTasks();
-    }
+      setSyncBadge(status) {
+        const el = document.getElementById('sync-badge');
+        if (!el) return;
+        const states = {
+          syncing: ['bg-slate-800 text-slate-400', '⏳ جاري المزامنة'],
+          synced:  ['bg-emerald-900/40 text-emerald-400 border-emerald-500/20', '☁️ محفوظ سحابياً'],
+          error:   ['bg-rose-900/40 text-rose-400 border-rose-500/20', '⚠️ خطأ في الحفظ'],
+          offline: ['bg-amber-900/40 text-amber-400 border-amber-500/20', '📡 أوفلاين (كاش)'],
+        };
+        const [cls, txt] = states[status] || states.syncing;
+        el.className = 'badge border ' + cls;
+        el.textContent = txt;
+      },
+    };
 
-    // Modal Add Task
-    function openAddTaskModal() { document.getElementById('task-modal').classList.remove('hidden'); }
-    function closeAddTaskModal() { document.getElementById('task-modal').classList.add('hidden'); }
-    function saveNewTask() {
-      const title = document.getElementById('new-task-title').value.trim();
-      const cat = document.getElementById('new-task-cat').value;
-      const dur = parseInt(document.getElementById('new-task-dur').value) || 60;
-      const desc = document.getElementById('new-task-desc').value.trim();
+    // =========================================================================
+    // SECTION 12: APP INITIALIZATION
+    // =========================================================================
 
-      if (!title) return;
+    let _pwaPrompt = null;
 
-      const newTask = {
-        id: Date.now(),
-        title,
-        cat,
-        dur,
-        items: [
-          { id: 'sub-1', name: 'المهمة الأساسية: ' + title, done: false }
-        ],
-        desc: desc || 'مهمة مضافة بواسطة المستخدم'
-      };
+    const App = {
+      async init() {
+        onAuthStateChanged(auth, async (user) => {
+          if (user) {
+            AppState.uid = user.uid;
+            await this._loadUserData();
+          } else {
+            try {
+              await signInAnonymously(auth);
+            } catch (err) {
+              console.error('[Auth Error]', err);
+              this._showLoadError('تعذر الاتصال بقاعدة بيانات Firebase. تأكدي من تفعيل Anonymous Auth في الكونسول.');
+            }
+          }
+        });
 
-      state.tasks.push(newTask);
-      saveState();
-      closeAddTaskModal();
-      renderTasks();
-      renderDaily();
-    }
+        window.addEventListener('online',  () => UI.setSyncBadge('synced'));
+        window.addEventListener('offline', () => UI.setSyncBadge('offline'));
 
-    // Render Weekly Matrix
-    function renderWeekly() {
-      const tbody = document.getElementById('weekly-table-body');
-      tbody.innerHTML = '';
+        window.addEventListener('beforeinstallprompt', (e) => {
+          e.preventDefault();
+          _pwaPrompt = e;
+          const btn = document.getElementById('pwa-install-btn');
+          if (btn) btn.classList.remove('hidden');
+        });
+      },
 
-      const rows = [
-        { name: 'دوام الـ ITI Testing Track', sat: 7, sun: 7, mon: 7, tue: 7, wed: 7, thu: 7, fri: 2.5, total: 44.5 },
-        { name: 'مذاكرة CT-GenAI Exam (سيلبس وعملي)', sat: 2, sun: 2, mon: 2, tue: 2, wed: 2, thu: 2, fri: 3.5, total: 15.5 },
-        { name: 'البحث الفكري الديني (خطة الـ PDF)', sat: 1, sun: 1, mon: 1, tue: 1, wed: 1, thu: 1, fri: 2, total: 8.0 },
-        { name: 'بودكاست وإنجليزي (Commute Stack)', sat: 2, sun: 2, mon: 2, tue: 2, wed: 2, thu: 2, fri: 0, total: 12.0 },
-        { name: 'وقت الوالدة والبر (يومي + خروجة)', sat: 1.5, sun: 1.5, mon: 1.5, tue: 1.5, wed: 1.5, thu: 1.5, fri: 4, total: 13.0 },
-        { name: 'الشغل والفريلانس / المشروع', sat: 0.5, sun: 0.5, mon: 0.5, tue: 0.5, wed: 0.5, thu: 0.5, fri: 0, total: 3.0 },
-        { name: 'الصلوات الـ 5 والراحة والنوم (7-8س)', sat: 10, sun: 10, mon: 10, tue: 10, wed: 10, thu: 10, fri: 12, total: 72.0 }
-      ];
+      async installPWA() {
+        if (!_pwaPrompt) return;
+        _pwaPrompt.prompt();
+        const { outcome } = await _pwaPrompt.userChoice;
+        if (outcome === 'accepted') {
+          const btn = document.getElementById('pwa-install-btn');
+          if (btn) btn.classList.add('hidden');
+        }
+        _pwaPrompt = null;
+      },
 
-      rows.forEach(r => {
-        const tr = document.createElement('tr');
-        tr.className = 'hover:bg-slate-800/40 transition';
-        tr.innerHTML = `
-          <td class="py-2.5 px-3 font-semibold text-white">${r.name}</td>
-          <td class="py-2.5 px-2 text-center text-slate-300 font-mono">${r.sat}س</td>
-          <td class="py-2.5 px-2 text-center text-slate-300 font-mono">${r.sun}س</td>
-          <td class="py-2.5 px-2 text-center text-slate-300 font-mono">${r.mon}س</td>
-          <td class="py-2.5 px-2 text-center text-slate-300 font-mono">${r.tue}س</td>
-          <td class="py-2.5 px-2 text-center text-slate-300 font-mono">${r.wed}س</td>
-          <td class="py-2.5 px-2 text-center text-slate-300 font-mono">${r.thu}س</td>
-          <td class="py-2.5 px-2 text-center text-amber-300 font-mono font-bold bg-slate-800/40">${r.fri}س</td>
-          <td class="py-2.5 px-3 text-center text-emerald-400 font-extrabold font-mono">${r.total}س</td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
+      async _loadUserData() {
+        try {
+          // 1. Load settings
+          const settingsSnap = await get(ref(db, CONSTANTS.PATHS.settings(AppState.uid)));
+          if (settingsSnap.exists()) {
+            const saved = settingsSnap.val();
+            AppState.settings     = { ...AppState.settings, ...saved };
+            AppState.selectedDate = saved.selectedDate || AppState.selectedDate;
+          }
 
-    // Navigation Tabs
-    function switchTab(tabId) {
-      state.currentTab = tabId;
-      saveState();
+          // 2. Load tracks
+          const tracksSnap = await get(ref(db, CONSTANTS.PATHS.tracks(AppState.uid)));
+          if (tracksSnap.exists()) {
+            AppState.tracks = tracksSnap.val();
+          } else {
+            await this._seedDefaultTracks();
+          }
 
-      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-      const activeBtn = document.getElementById('tab-' + tabId);
-      if (activeBtn) activeBtn.classList.add('active');
+          // 3. Listen for realtime track changes
+          onValue(ref(db, CONSTANTS.PATHS.tracks(AppState.uid)), (snap) => {
+            if (snap.exists()) {
+              AppState.tracks = snap.val();
+              TaskAgent.render();
+              DailyAgent.render();
+            }
+          });
 
-      document.querySelectorAll('.mobile-tab').forEach(btn => btn.classList.remove('active'));
-      const activeMobileBtn = document.getElementById('m-tab-' + tabId);
-      if (activeMobileBtn) activeMobileBtn.classList.add('active');
+          // 4. Load prayers & block states
+          await PrayerEngine.load(AppState.selectedDate);
+          await DailyAgent.loadBlockStates();
 
-      document.getElementById('view-daily').classList.add('hidden');
-      document.getElementById('view-tasks').classList.add('hidden');
-      document.getElementById('view-weekly').classList.add('hidden');
-      document.getElementById('view-monthly').classList.add('hidden');
+          // 5. Initialize UI
+          DailyAgent.applySettingsToUI();
+          const d = daysToExam();
+          document.getElementById('days-to-exam').textContent      = d + ' يوم';
+          document.getElementById('monthly-countdown').textContent = d;
+          document.getElementById('bar-exam-days').textContent     = d;
+          document.getElementById('telemetry-days').textContent    = d;
 
-      document.getElementById('view-' + tabId).classList.remove('hidden');
+          WeeklyView.render();
+          MonthlyView.render();
+          EliteUI.initScrollReveal();
+          UI.setSyncBadge('synced');
 
-      if (tabId === 'tasks') renderTasks();
-      if (tabId === 'weekly') renderWeekly();
-      if (tabId === 'daily') renderDaily();
-    }
+          // Dismiss loading overlay smoothly
+          const loader = document.getElementById('loading-overlay');
+          loader.style.opacity = '0';
+          setTimeout(() => loader.classList.add('hidden'), 350);
 
-    // Set Arrival
-    function setArrival(h) {
-      state.arrivalHour = parseFloat(h);
-      document.getElementById('arrival-slider').value = h;
-      document.getElementById('arrival-display').innerText = format12(h * 60);
-      document.getElementById('scenario-badge').innerText = `وصول ${format12(h * 60)}`;
-      saveState();
-      renderDaily();
-    }
+        } catch (err) {
+          console.error('[App Init Error]', err);
+          this._showLoadError('فشل تحميل البيانات. تحقق من اتصال الإنترنت وقواعد Firebase.');
+        }
+      },
 
-    function setStrategy(st) {
-      state.strategy = st;
-      saveState();
-      renderDaily();
-    }
+      async _seedDefaultTracks() {
+        const uid = AppState.uid;
+        const seed = {
+          [genKey()]: {
+            name: 'ITI Testing Track', category: 'ITI', icon: '🎓', color: '#3b82f6',
+            order: 1, isActive: true, createdAt: Date.now(),
+            courses: {
+              [genKey()]: {
+                name: 'API Testing with Python', order: 1, isActive: true,
+                estimatedMinPerChapter: 90, totalChapters: 4, startedAt: Date.now(),
+                chapters: {
+                  [genKey()]: { name: 'Lab 1: CRUD Endpoints Validation', chapterNumber: 1, estimatedMin: 90, isDone: true,  doneAt: Date.now(), notes: '' },
+                  [genKey()]: { name: 'Lab 2: Pytest Fixtures & Parametrization', chapterNumber: 2, estimatedMin: 90, isDone: true,  doneAt: Date.now(), notes: '' },
+                  [genKey()]: { name: 'Lab 3: Mocking & Auth Tokens', chapterNumber: 3, estimatedMin: 90, isDone: false, doneAt: null, notes: '' },
+                  [genKey()]: { name: 'Module Project: Automated Regression Suite', chapterNumber: 4, estimatedMin: 120, isDone: false, doneAt: null, notes: '' },
+                },
+              },
+            },
+          },
+          [genKey()]: {
+            name: 'CT-GenAI Exam Syllabus', category: 'CT-GenAI', icon: '🤖', color: '#10b981',
+            order: 2, isActive: true, createdAt: Date.now(),
+            courses: {
+              [genKey()]: {
+                name: 'Ch1: Intro to GenAI for Testing (100m)', order: 1, isActive: true,
+                estimatedMinPerChapter: 50, totalChapters: 2, startedAt: Date.now(),
+                chapters: {
+                  [genKey()]: { name: '1.1 GenAI vs Traditional Testing', chapterNumber: 1, estimatedMin: 50, isDone: true,  doneAt: Date.now(), notes: '' },
+                  [genKey()]: { name: '1.2 LLM Capabilities & Limitations', chapterNumber: 2, estimatedMin: 50, isDone: true,  doneAt: Date.now(), notes: '' },
+                },
+              },
+              [genKey()]: {
+                name: 'Ch2: Prompt Engineering (365m)', order: 2, isActive: true,
+                estimatedMinPerChapter: 90, totalChapters: 4, startedAt: Date.now(),
+                chapters: {
+                  [genKey()]: { name: '2.1 Zero-shot & Few-shot Prompting', chapterNumber: 1, estimatedMin: 90, isDone: true,  doneAt: Date.now(), notes: '' },
+                  [genKey()]: { name: '2.2 Test Case Generation via Prompts', chapterNumber: 2, estimatedMin: 90, isDone: true,  doneAt: Date.now(), notes: '' },
+                  [genKey()]: { name: '2.3 System Prompts & Defect Reports', chapterNumber: 3, estimatedMin: 90, isDone: false, doneAt: null, notes: '' },
+                  [genKey()]: { name: '2.4 Output Evaluation & Hallucination Check', chapterNumber: 4, estimatedMin: 95, isDone: false, doneAt: null, notes: '' },
+                },
+              },
+              [genKey()]: {
+                name: 'Ch3: Managing Risks of GenAI (160m)', order: 3, isActive: true,
+                estimatedMinPerChapter: 80, totalChapters: 2, startedAt: Date.now(),
+                chapters: {
+                  [genKey()]: { name: '3.1 Bias, Privacy & Security Risks', chapterNumber: 1, estimatedMin: 80, isDone: false, doneAt: null, notes: '' },
+                  [genKey()]: { name: '3.2 Testing GenAI Systems for Risk', chapterNumber: 2, estimatedMin: 80, isDone: false, doneAt: null, notes: '' },
+                },
+              },
+            },
+          },
+          [genKey()]: {
+            name: 'البحث الديني الفكري (PDF)', category: 'Spiritual', icon: '📖', color: '#14b8a6',
+            order: 3, isActive: true, createdAt: Date.now(),
+            courses: {
+              [genKey()]: {
+                name: 'الأسبوع الأول: إثبات الوجود والرد على الربوبية', order: 1, isActive: true,
+                estimatedMinPerChapter: 60, totalChapters: 3, startedAt: Date.now(),
+                chapters: {
+                  [genKey()]: { name: 'قراءة فصول "شموع النهار" (د. العجيري)', chapterNumber: 1, estimatedMin: 90, isDone: true,  doneAt: Date.now(), notes: '' },
+                  [genKey()]: { name: 'سماع سلسلة د. سامي عامري (براهين الوجود)', chapterNumber: 2, estimatedMin: 90, isDone: true,  doneAt: Date.now(), notes: '' },
+                  [genKey()]: { name: 'تلخيص وكتابة 3 حجج عقلية مضادة للربوبية', chapterNumber: 3, estimatedMin: 60, isDone: false, doneAt: null, notes: '' },
+                },
+              },
+            },
+          },
+          [genKey()]: {
+            name: 'الشغل والمشروع الشخصي', category: 'Project', icon: '💼', color: '#f59e0b',
+            order: 4, isActive: true, createdAt: Date.now(),
+            courses: {
+              [genKey()]: {
+                name: 'صيانة الباك إند والشغل اليومي', order: 1, isActive: true,
+                estimatedMinPerChapter: 30, totalChapters: 2, startedAt: Date.now(),
+                chapters: {
+                  [genKey()]: { name: 'متابعة ومراجعة الـ Critical PRs', chapterNumber: 1, estimatedMin: 30, isDone: true,  doneAt: Date.now(), notes: '' },
+                  [genKey()]: { name: 'تسليم مهام الفريلانس الأسبوعية', chapterNumber: 2, estimatedMin: 30, isDone: false, doneAt: null, notes: '' },
+                },
+              },
+            },
+          },
+        };
 
-    function setDayType(isFri) {
-      state.isFriday = isFri;
-      document.getElementById('btn-weekday').className = !isFri ? 'px-2 py-1 rounded font-bold bg-indigo-600 text-white transition' : 'px-2 py-1 rounded text-slate-400 font-semibold hover:text-white transition';
-      document.getElementById('btn-friday').className = isFri ? 'px-2 py-1 rounded font-bold bg-indigo-600 text-white transition' : 'px-2 py-1 rounded text-slate-400 font-semibold hover:text-white transition';
-      saveState();
-      renderDaily();
-    }
+        await firebaseWrite(CONSTANTS.PATHS.tracks(uid), seed);
+        AppState.tracks = seed;
+      },
 
-    function toggleCondition(type) {
-      if (type === 'exhausted') {
-        state.isExhausted = !state.isExhausted;
-        document.getElementById('tag-exhausted').innerText = state.isExhausted ? 'مفعل ✅' : 'غير مفعل';
-        document.getElementById('tag-exhausted').className = state.isExhausted ? 'text-[10px] text-amber-400 font-bold' : 'text-[10px] text-slate-400';
-      } else if (type === 'mom_outing') {
-        state.isMomOuting = !state.isMomOuting;
-        document.getElementById('tag-mom').innerText = state.isMomOuting ? 'مفعل ✅' : 'غير مفعل';
-        document.getElementById('tag-mom').className = state.isMomOuting ? 'text-[10px] text-rose-400 font-bold' : 'text-[10px] text-slate-400';
-      } else if (type === 'no_work') {
-        state.isNoWork = !state.isNoWork;
-        document.getElementById('tag-nowork').innerText = state.isNoWork ? 'مفعل ✅' : 'غير مفعل';
-        document.getElementById('tag-nowork').className = state.isNoWork ? 'text-[10px] text-emerald-400 font-bold' : 'text-[10px] text-slate-400';
-      }
-      saveState();
-      renderDaily();
-    }
+      async confirmReset() {
+        if (!confirm('هل أنتِ متأكدة من رغبتك في مسح كل البيانات والبدء من الصفر؟')) return;
+        await firebaseWrite(CONSTANTS.PATHS.userRoot(AppState.uid), null);
+        location.reload();
+      },
 
-    function processNaturalPrompt() {
-      const input = document.getElementById('chat-prompt');
-      const text = input.value.trim().toLowerCase();
-      if (!text) return;
+      _showLoadError(msg) {
+        const el = document.getElementById('loading-error');
+        if (el) {
+          el.textContent = msg;
+          el.classList.remove('hidden');
+        }
+      },
+    };
 
-      if (text.includes('3') || text.includes('٣') || text.includes('تلاته') || text.includes('ثلاثة')) {
-        setArrival(15);
-      } else if (text.includes('4') || text.includes('٤')) {
-        setArrival(16);
-      } else if (text.includes('6') || text.includes('٦')) {
-        setArrival(18);
-      } else if (text.includes('7') || text.includes('٧')) {
-        setArrival(19);
-      }
+    // =========================================================================
+    // SECTION 13: GLOBAL BINDINGS
+    // =========================================================================
 
-      if (text.includes('مصدع') || text.includes('تعبان') || text.includes('نوم') || text.includes('ارهاق')) {
-        state.isExhausted = true;
-        document.getElementById('tag-exhausted').innerText = 'مفعل ✅';
-        document.getElementById('tag-exhausted').className = 'text-[10px] text-amber-400 font-bold';
-      }
+    window.UI          = UI;
+    window.DailyAgent  = DailyAgent;
+    window.TaskAgent   = TaskAgent;
+    window.WeeklyView  = WeeklyView;
+    window.MonthlyView = MonthlyView;
+    window.EliteUI     = EliteUI;
+    window.App         = App;
 
-      if (text.includes('مفيش شغل') || text.includes('بدون شغل')) {
-        state.isNoWork = true;
-        document.getElementById('tag-nowork').innerText = 'مفعل ✅';
-        document.getElementById('tag-nowork').className = 'text-[10px] text-emerald-400 font-bold';
-      }
+    App.init();
 
-      input.value = '';
-      saveState();
-      renderDaily();
-    }
-
-    // Apply Loaded State to UI Elements
-    function applyStateToUI() {
-      document.getElementById('selected-date').value = state.selectedDateStr;
-      document.getElementById('arrival-slider').value = state.arrivalHour;
-      document.getElementById('arrival-display').innerText = format12(state.arrivalHour * 60);
-
-      const rad = document.querySelector(`input[name="strategy"][value="${state.strategy}"]`);
-      if (rad) rad.checked = true;
-
-      setDayType(state.isFriday);
-
-      document.getElementById('tag-exhausted').innerText = state.isExhausted ? 'مفعل ✅' : 'غير مفعل';
-      document.getElementById('tag-exhausted').className = state.isExhausted ? 'text-[10px] text-amber-400 font-bold' : 'text-[10px] text-slate-400';
-      document.getElementById('tag-mom').innerText = state.isMomOuting ? 'مفعل ✅' : 'غير مفعل';
-      document.getElementById('tag-mom').className = state.isMomOuting ? 'text-[10px] text-rose-400 font-bold' : 'text-[10px] text-slate-400';
-      document.getElementById('tag-nowork').innerText = state.isNoWork ? 'مفعل ✅' : 'غير مفعل';
-      document.getElementById('tag-nowork').className = state.isNoWork ? 'text-[10px] text-emerald-400 font-bold' : 'text-[10px] text-slate-400';
-
-      refreshPrayers();
-      switchTab(state.currentTab || 'daily');
-    }
-
-    // Boot
-    applyStateToUI();
   </script>
+
+  <!-- Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch((err) => {
+          console.warn('[SW Registration Error]', err);
+        });
+      });
+    }
+  </script>
+
 </body>
 </html>

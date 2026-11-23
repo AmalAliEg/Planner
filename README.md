@@ -1,22 +1,40 @@
-# ⚡ Adaptive Daily Scheduler Agent (Level 3 - Hybrid Offline/Online)
+# ⚡ مخطط الإنجاز التكيفي (Adaptive Planner)
+نظام الجدولة الذكية وإدارة التعلم القائم على وكيلين متكاملين (Two-Agent Architecture) مع حساب فلكي دقيق لمواقيت الصلاة بالجيزة وتخزين سحابي لحظي عبر Firebase Realtime Database.
 
-نظام التخطيط وإعادة التكيف اليومي الذكي لمهندسي الباك إند (ITI Testing Track + ISTQB CT-GenAI + البحث الديني الفكري + الأسرة).
+---
 
-## 🚀 التشغيل الفوري (الآن):
-1. افتحي الملف مباشرة بالضغط مرتين على `run.bat` أو كليك يمين على `index.html` واختاري **Open with Chrome / Edge**.
-2. **يعمل 100% Offline** بدون الحاجة لأي اتصال بالإنترنت أو تثبيت باقات إضافية.
+## 🚀 التشغيل السريع (Quick Start)
+1. شغلي الملف `run.bat` أو افتحي `index.html` في أي متصفح (Chrome أو Edge موصى بهما).
+2. التطبيق يعمل كـ **PWA**: يمكنك تثبيته مباشرة على الهاتف أو الديسكتوب بالضغط على زر "تثبيت التطبيق".
+3. يعمل **Online و Offline**: في حال انقطاع النت، المحرك الفلكي يحسب مواقيت الصلاة بدقة دون الحاجة لأي سيرفر.
 
-## 🛠️ المميزات الرئيسية:
-- **الموازنة الحسابية الصارمة (24h Balance):** يضمن عدم وجود أي تداخل، والحفاظ الإلزامي على 7 ساعات نوم.
-- **إعادة التكيف الذكي عند الطوارئ (Live Scenarios):**
-  - ضغطة زر لتأخير المواصلات (وصول 7 م).
-  - ضغطة زر للإرهاق والصداع (زيادة القيلولة وتخفيف المهام).
-  - ضغطة زر لمشوار الوالدة (تأمين 2.5 ساعة كاملة للبر بدون تأنيب ضمير).
-  - ضغطة زر لإلغاء الشغل في يوم معين لإفساح المجال للامتحان.
-- **تتبع امتحان 17 ديسمبر:** عداد تنازلي وماتريكس التكرار المتباعد (Spaced Repetition) لفصول السيلبس من Ch1 إلى Ch5.
-- **تكامل الـ PDF الفكري:** تتبع الأسابيع الأربعة لقراءات ومحاضرات الرد على الربوبية وحفظ السنة.
+---
 
-## 🏗️ التطوير المستقبلي كـ Microservice (Level 3 Architecture):
-- **الواجهة:** React + Tailwind CSS أو FastHTML.
-- **محرك التخطيط:** FastAPI + LangGraph / CrewAI.
-- **التخزين:** SQLite / PostgreSQL مع LocalStorage Offline Sync.
+## 🔑 إعداد قواعد حماية Firebase (Security Rules)
+لتفعيل القراءة والكتابة للـ Anonymous Auth في Firebase Console لمشروع `planner-c95c5`:
+1. ادخلي على [Firebase Console](https://console.firebase.google.com/)
+2. اختاري المشروع `planner-c95c5`
+3. في القائمة الجانبية: **Build** -> **Authentication** -> تبويب **Sign-in method** -> فعّلي **Anonymous**.
+4. في القائمة الجانبية: **Build** -> **Realtime Database** -> تبويب **Rules**، وضعي الكود التالي:
+
+```json
+{
+  "rules": {
+    "users": {
+      "$userId": {
+        ".read": "auth != null && auth.uid === $userId",
+        ".write": "auth != null && auth.uid === $userId"
+      }
+    }
+  }
+}
+```
+5. اضغطي **Publish**.
+
+---
+
+## 🧩 الهيكلية التقنية (Architecture)
+- **Agent 1 (Task Manager):** يدير شجرة الكورسات والشباتر (Track -> Course -> Chapter) ويحسب الـ Progress الفعلي من إنجاز الشباتر الذرية.
+- **Agent 2 (Scheduler):** يولد الجدول اليومي بـ 24 ساعة بدقة 12 ساعة (ص/م) مربوطاً بمواقيت صلوات الجيزة الفلكية والرجوع من الـ ITI.
+- **Astronomical Prayer Engine:** محرك فلكي مبني داخلياً وفقاً لهيئة المساحة المصرية (الفجر 19.5°، العشاء 17.5°).
+- **Elite UI System:** مزود بجميع المكونات الاحترافية (Scroll Reveal, Before/After, Accordion, Sticky Bottom Bar, System Status Indicator).
