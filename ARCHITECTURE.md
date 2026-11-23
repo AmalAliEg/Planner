@@ -1,155 +1,191 @@
-# 🏗️ Adaptive Planner — Architecture Document
-> Version 1.0 | Planning Phase | Nov 2026
+# 🏗️ Adaptive Planner — Architecture & Normalized Schema Document
+> Version 2.0 | Normalized Schema & Discrete Task Architecture | Nov 2026
 
 ---
 
-## 1. SYSTEM OVERVIEW
+## 1. SYSTEM OVERVIEW & ARCHITECTURE
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                    ADAPTIVE PLANNER ECOSYSTEM                    │
-│                                                                  │
-│  ┌─────────────┐    ┌─────────────────┐    ┌────────────────┐  │
-│  │  Agent 2    │◄───│   App Shell     │───►│   Agent 1      │  │
-│  │ Scheduler   │    │  (UI + Router)  │    │ Task Manager   │  │
-│  │  Engine     │    │                 │    │   Engine       │  │
-│  └──────┬──────┘    └────────┬────────┘    └───────┬────────┘  │
-│         │                   │                      │           │
-│         └───────────┬──────────────────────────────┘           │
-│                     │                                           │
-│              ┌──────▼───────┐                                  │
-│              │  Firebase    │                                   │
-│              │  Realtime DB │                                   │
-│              │  (Cloud)     │                                   │
-│              └──────────────┘                                   │
-└──────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 2. EERD — Entity Relationship Diagram (Extended)
-
-```
-USER ──────1────────────1──── SETTINGS
-  │
-  │1
-  │
-  │N
-TRACK (Main Category: ITI | CT-GenAI | Spiritual | Project)
-  │  name, category, color, icon, estimatedTotalMin, order
-  │
-  │1
-  │N
-COURSE (Sub-Track: e.g. "API Testing with Python")
-  │  name, description, totalChapters, estimatedMinPerChapter
-  │
-  │1
-  │N
-CHAPTER (Atomic Unit: e.g. "Lab 2: Pytest Fixtures")
-     name, chapterNumber, estimatedMin, isDone, doneAt, notes
-
-USER ──────1────────────N──── DAILY_PLAN (keyed by date)
-  │  strategy, arrivalHour, isFriday, conditions
-  │
-  │1
-  │N
-TIME_BLOCK (per plan)
-     blockKey, type, name, linkedChapterId, startMin, durationMin, isDone
-
-USER ──────1────────────N──── PRAYER_CACHE (keyed by lat+lng+date)
-     fajrMin, dhuhrMin, asrMin, maghribMin, ishaMin, source
+┌────────────────────────────────────────────────────────────────────────┐
+│                      ADAPTIVE PLANNER ECOSYSTEM                        │
+│                                                                        │
+│   ┌──────────────┐     ┌─────────────────────┐     ┌───────────────┐   │
+│   │   Agent 2    │◄────│     App Shell       │────►│    Agent 1    │   │
+│   │  Scheduler   │     │ (Dashboard & UI)    │     │  Task Manager │   │
+│   │ Discrete 24h │     │                     │     │  & Hierarchy  │   │
+│   └──────┬───────┘     └──────────┬──────────┘     └───────┬───────┘   │
+│          │                        │                        │           │
+│          └────────────┬───────────┴───────────┬────────────┘           │
+│                       │                       │                        │
+│                ┌──────▼────────┐       ┌──────▼────────┐               │
+│                │  taskTypes    │       │ taskHierarchy │               │
+│                │ (Types Table) │       │ (Track/Course)│               │
+│                └───────────────┘       └───────────────┘               │
+│                       │                       │                        │
+│                ┌──────▼────────┐       ┌──────▼────────┐               │
+│                │  dailyPlans   │       │     users     │               │
+│                │ (By Date)     │       │ (Profile/Cfg) │               │
+│                └───────────────┘       └───────────────┘               │
+│                                                                        │
+│                   FIREBASE REALTIME DB (CLOUD ROOT)                    │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. FIREBASE REALTIME DB SCHEMA (JSON Tree)
+## 2. NORMALIZED FIREBASE REALTIME DB SCHEMA (Root Tables)
 
-```
-users/
-  {userId}/
-    profile/         ← name, email, city, lat, lng, timezone
-    settings/        ← strategy, arrivalHour, selectedDate, toggles
-    tracks/
-      {trackId}/
-        name, category, color, icon, order, isActive
-        courses/
-          {courseId}/
-            name, description, totalChapters, estimatedMinPerChapter
-            chapters/
-              {chapterId}/
-                name, chapterNumber, estimatedMin, isDone, doneAt, notes
-    dailyPlans/
-      {YYYY-MM-DD}/
-        strategy, arrivalHour, conditions (isFriday, isExhausted...)
-        blocks/
-          {blockKey}/
-            isDone, doneAt
-    prayerCache/
-      {lat_lng_date}/
-        fajrMin, dhuhrMin, asrMin, maghribMin, ishaMin, source
-```
+Instead of nesting everything under `/users/{uid}`, the database is normalized into 4 independent, readable root collections:
 
----
-
-## 4. FIREBASE SECURITY RULES
-
+### Table 1: `/users`
+Stores user profile, global settings, and active preferences:
 ```json
 {
-  "rules": {
-    "users": {
-      "$userId": {
-        ".read": "auth != null && auth.uid === $userId",
-        ".write": "auth != null && auth.uid === $userId"
+  "users": {
+    "zo7CiltDVzUVbVHWhPFFaxMQr9s1": {
+      "settings": {
+        "strategy": "B",
+        "arrivalHour": 15.0,
+        "isFriday": false,
+        "isExhausted": false,
+        "isMomOuting": false,
+        "isNoWork": false,
+        "selectedDate": "2026-11-23",
+        "lastUpdated": 1795405098690
       }
     }
   }
 }
 ```
 
-**Phase 1 MVP (before Auth):** Use Anonymous Auth so each device gets a stable uid without login.
+### Table 2: `/taskTypes`
+Master table for block types and categories. The user has full CRUD control (Add/Edit/Delete):
+```json
+{
+  "taskTypes": {
+    "type_prayer":    { "id": "type_prayer",    "name": "صلوات وفروض",   "color": "amber",   "icon": "🕌", "isSystem": true },
+    "type_commute":   { "id": "type_commute",   "name": "مواصلات وتنقل", "color": "indigo",  "icon": "🚌", "isSystem": true },
+    "type_study":     { "id": "type_study",     "name": "مذاكرة وسيلبس", "color": "emerald", "icon": "📚", "isSystem": true },
+    "type_lab":       { "id": "type_lab",       "name": "لابات وتطبيق",  "color": "blue",    "icon": "💻", "isSystem": true },
+    "type_family":    { "id": "type_family",    "name": "وقت الوالدة ❤️", "color": "rose",    "icon": "❤️", "isSystem": true },
+    "type_spiritual": { "id": "type_spiritual", "name": "بحث ديني",     "color": "teal",    "icon": "📖", "isSystem": true },
+    "type_work":      { "id": "type_work",      "name": "شغل وفريلانس",  "color": "amber",   "icon": "💼", "isSystem": true },
+    "type_rest":      { "id": "type_rest",      "name": "راحة ونوم",     "color": "purple",  "icon": "😴", "isSystem": true },
+    "type_routine":   { "id": "type_routine",   "name": "روتين وتجهيز",  "color": "slate",   "icon": "⚙️", "isSystem": true },
+    "type_audio":     { "id": "type_audio",     "name": "صوتيات وبودكاست", "color": "violet", "icon": "🎧", "isSystem": true }
+  }
+}
+```
+
+### Table 3: `/taskHierarchy`
+Strict 3-level normalized tree:
+**Parent Track -> Child Course -> Child Chapter/Lab**
+- **Course Duration Flexibility:** `planningMode` can be `lectures` (بعدد المحاضرات) OR `days` (بعدد الأيام).
+- **Chapter Precision:** Exact `durationHours` and `durationMinutes`.
+- **Labs & Deadlines:** `isLab: true`, `dueDate: "2026-11-28T18:00"`, with automated Calendar (.ics) generation & 2-day reminder alarm.
+- **Resource Link:** `resourceLink: "https://..."` for books, PDFs, and podcasts.
+
+```json
+{
+  "taskHierarchy": {
+    "track_iti": {
+      "id": "track_iti",
+      "name": "ITI Testing Track",
+      "category": "ITI",
+      "typeId": "type_lab",
+      "icon": "🎓",
+      "courses": {
+        "course_api_testing": {
+          "id": "course_api_testing",
+          "name": "API Testing with Python & Pytest",
+          "planningMode": "lectures",
+          "totalLectures": 4,
+          "totalDays": 14,
+          "chapters": {
+            "chap_api_lab1": {
+              "id": "chap_api_lab1",
+              "name": "Lab 1: CRUD Endpoints Validation",
+              "durationHours": 1,
+              "durationMinutes": 30,
+              "estimatedMin": 90,
+              "isLab": true,
+              "dueDate": "2026-11-25T18:00",
+              "resourceLink": "https://github.com",
+              "isDone": true,
+              "doneAt": 1795405098690
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### Table 4: `/dailyPlans`
+Stores daily schedule completion states indexed by date (`YYYY-MM-DD`):
+```json
+{
+  "dailyPlans": {
+    "2026-11-23": {
+      "snapshot": { "arrivalHour": 15.0, "strategy": "B" },
+      "blocks": {
+        "blk-commute-go-transit": { "isDone": true, "doneAt": 1795405098 },
+        "blk-commute-go-podcasts": { "isDone": true, "doneAt": 1795405099 },
+        "blk-commute-go-english": { "isDone": false }
+      }
+    }
+  }
+}
+```
 
 ---
 
-## 5. FEATURE ROADMAP
+## 3. FIREBASE SECURITY RULES FOR NORMALIZED SCHEMA
 
-### Phase 1 — MVP (Now, Single File)
-- [x] Astronomical prayer engine (Giza offline)
-- [x] Dynamic 24h scheduler (arrival-based, prayer-anchored)
-- [x] Task tree: Track → Course → Chapter (3 levels, each with checkbox)
-- [x] Firebase RTDB persistence (not localStorage)
-- [x] PWA installable, offline-capable via Service Worker
-- [x] Mobile-first bottom nav + Elite UI
-
-### Phase 2 — Multi-User App (3 months)
-- [ ] Firebase Auth (Google + Email)
-- [ ] City-based prayer configuration
-- [ ] Exam reminders via Push Notifications
-- [ ] Analytics & Progress Dashboard
-
-### Phase 3 — Native App (6 months)
-- [ ] Capacitor → Android APK / iOS IPA
-- [ ] Home screen widgets
-- [ ] AI-powered rescheduling via Gemini API
-
----
-
-## 6. TECH STACK
-
-| Layer | Phase 1 (Now) | Phase 2+ |
-|---|---|---|
-| Frontend | Vanilla HTML+JS + CDN Tailwind | React + Vite + Tailwind |
-| Database | Firebase Realtime DB | Firestore (at scale) |
-| Auth | Firebase Anonymous Auth | Firebase Auth (Google) |
-| Mobile | PWA | Capacitor → APK/IPA |
-| Hosting | Firebase Hosting | Same |
+```json
+{
+  "rules": {
+    "users": {
+      "$userId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $userId"
+      }
+    },
+    "taskTypes": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "taskHierarchy": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "dailyPlans": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "prayerCache": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}
+```
 
 ---
 
-## 7. CODE PRINCIPLES
+## 4. MATHEMATICAL DISCRETE SCHEDULE DESIGN (24.00-Hour Invariant)
 
-1. JSDoc on every function (WHY not just WHAT)
-2. Single Responsibility per module/function
-3. No magic numbers — all constants named
-4. Data-down, events-up pattern
-5. Firebase writes batched to minimize cost
-6. Offline-first: Astronomical engine works without network
+Every single daily task is a **separate discrete line item**:
+- **Morning Commute:**
+  1. `مواصلات رايح (المترو / النقل الجماعي)` (40m)
+  2. `استماع بودكاست الذكاء الاصطناعي (AI Podcasts)` (45m) [🔗 رابط البودكاست]
+  3. `تدريب التحدث والإنجليزي (English Shadowing)` (35m) [🔗 رابط التدريب]
+- **Return Commute:**
+  1. `مواصلات راجع من دوام الـ ITI` (49m)
+  2. `استماع صوتيات وسلاسل البحث الديني الفكري` (41m) [🔗 رابط المرجع]
+- **Arrival & Home:**
+  1. `وصول البيت واستقبال الوالدة والاطمئنان عليها ❤️` (15m)
+  2. `غداء عائلي دافئ وسوالف مع الوالدة ❤️` (35m)
+  3. `جلسة مذاكرة مبكرة CT-GenAI` أو `قيلولة تعافي وشحن طاقة`
+- **Prayer Anchors:** Calculated for Giza (Egyptian Survey Authority: Fajr 19.5°, Isha 17.5°).
